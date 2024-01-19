@@ -44,22 +44,22 @@ impl<T> IndexMut<usize> for Tree<T> {
     }
 }
 
-impl<T> Index<&[usize]> for Tree<T> {
+impl<T> Index<Vec<usize>> for Tree<T> {
     type Output = Tree<T>;
-    fn index(&self, index: &[usize]) -> &Self::Output {
+    fn index(&self, index: Vec<usize>) -> &Self::Output {
         let mut current_node = self;
         for i in index {
-            current_node = &current_node[*i];
+            current_node = &current_node[i];
         }
         current_node
     }
 }
 
-impl<T> IndexMut<&[usize]> for Tree<T> {
-    fn index_mut(&mut self, index: &[usize]) -> &mut Self::Output {
+impl<T> IndexMut<Vec<usize>> for Tree<T> {
+    fn index_mut(&mut self, index: Vec<usize>) -> &mut Self::Output {
         let mut current_node = self;
         for i in index {
-            current_node = &mut current_node[*i];
+            current_node = &mut current_node[i];
         }
         current_node
     }
