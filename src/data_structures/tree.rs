@@ -44,24 +44,22 @@ impl<T> IndexMut<usize> for Tree<T> {
     }
 }
 
-impl<T> Index<String> for Tree<T> {
+impl<T> Index<&[usize]> for Tree<T> {
     type Output = Tree<T>;
-    fn index(&self, index: String) -> &Self::Output {
+    fn index(&self, index: &[usize]) -> &Self::Output {
         let mut current_node = self;
-        for c in index.chars() {
-            let new_index = c.to_string().parse::<usize>().unwrap();
-            current_node = &current_node[new_index];
+        for i in index {
+            current_node = &current_node[*i];
         }
         current_node
     }
 }
 
-impl<T> IndexMut<String> for Tree<T> {
-    fn index_mut(&mut self, index: String) -> &mut Self::Output {
+impl<T> IndexMut<&[usize]> for Tree<T> {
+    fn index_mut(&mut self, index: &[usize]) -> &mut Self::Output {
         let mut current_node = self;
-        for c in index.chars() {
-            let new_index = c.to_string().parse::<usize>().unwrap();
-            current_node = &mut current_node[new_index];
+        for i in index {
+            current_node = &mut current_node[*i];
         }
         current_node
     }
