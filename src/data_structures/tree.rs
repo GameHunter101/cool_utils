@@ -26,6 +26,10 @@ impl<T: Debug> Tree<T> {
         &self.node
     }
 
+    pub fn children(&self) -> &Vec<Tree<T>> {
+        &self.children
+    }
+
     pub fn add_child_node(&mut self, node: T) {
         self.add_child_tree(Tree::new(node));
     }
