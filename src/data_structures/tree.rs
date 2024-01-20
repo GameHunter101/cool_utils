@@ -58,7 +58,7 @@ impl<T: Debug> Tree<T> {
     pub fn index_depth(&self, index: Vec<usize>) -> Result<&Self, TreeError> {
         let mut current_node = self;
         for i in index {
-            if current_node.children.len() == 0 {
+            if current_node.children.len() == 0 || i>= current_node.children.len() {
                 return Err(TreeError::IndexOutOfBoundsError);
             }
             current_node = &current_node[i];
@@ -69,7 +69,7 @@ impl<T: Debug> Tree<T> {
     pub fn index_mut_depth(&mut self, index: Vec<usize>) -> Result<&mut Self, TreeError> {
         let mut current_node = self;
         for i in index {
-            if current_node.children.len() == 0 {
+            if current_node.children.len() == 0 || i >= current_node.children.len() {
                 return Err(TreeError::IndexOutOfBoundsError);
             }
             current_node = &mut current_node[i];
@@ -102,12 +102,9 @@ fn tree_test() {
 
     for i in 0..3 {
         tree.add_child_node(i);
-        for j in 0..2 {
-            tree[i].add_child_node(8);
-        }
     }
-    tree.append_at_depth(vec![0], 324);
+    tree.append_at_depth(vec![3], 324);
     dbg!(&tree);
-    let val = tree.index_depth(vec![0,2]).unwrap().node();
+    let val = tree.index_depth(vec![3]).unwrap().node();
     assert_eq!(324, *val);
 }
