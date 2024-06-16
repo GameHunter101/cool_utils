@@ -52,13 +52,13 @@ impl<T: Debug> Tree<T> {
     }
 
     pub fn is_leaf(&self) -> bool {
-        self.children.len() == 0
+        self.children.is_empty()
     }
 
     pub fn index_depth(&self, index: Vec<usize>) -> Result<&Self, TreeError> {
         let mut current_node = self;
         for i in index {
-            if current_node.children.len() == 0 || i>= current_node.children.len() {
+            if current_node.children.is_empty() || i >= current_node.children.len() {
                 return Err(TreeError::IndexOutOfBoundsError);
             }
             current_node = &current_node[i];
@@ -69,7 +69,7 @@ impl<T: Debug> Tree<T> {
     pub fn index_mut_depth(&mut self, index: Vec<usize>) -> Result<&mut Self, TreeError> {
         let mut current_node = self;
         for i in index {
-            if current_node.children.len() == 0 || i >= current_node.children.len() {
+            if current_node.children.is_empty() || i >= current_node.children.len() {
                 return Err(TreeError::IndexOutOfBoundsError);
             }
             current_node = &mut current_node[i];
