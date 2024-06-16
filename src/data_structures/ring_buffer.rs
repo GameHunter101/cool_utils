@@ -6,13 +6,14 @@ use std::{
     ops::{Index, IndexMut, Range},
 };
 
+#[derive(Clone)]
 pub struct RingBuffer<T> {
     pub buffer: Box<[T]>,
     ring_start: i32,
 }
 
 #[allow(unused)]
-impl<T: Debug> RingBuffer<T> {
+impl<T:Debug + Clone> RingBuffer<T> {
     pub fn new(data: Vec<T>) -> Self {
         RingBuffer {
             buffer: data.into_boxed_slice(),
@@ -85,28 +86,28 @@ impl<T: Debug> RingBuffer<T> {
     }
 }
 
-impl<T: Debug> Debug for RingBuffer<T> {
+impl<T:Debug + Clone> Debug for RingBuffer<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ordered = &self.index_range(0..-1);
         write!(f, "{:?}", ordered)
     }
 }
 
-impl<T: Debug> Index<i32> for RingBuffer<T> {
+impl<T:Debug + Clone> Index<i32> for RingBuffer<T> {
     fn index(&self, index: i32) -> &Self::Output {
         &self.buffer[self.recalculate_index(index)]
     }
     type Output = T;
 }
 
-impl<T: Debug> Index<u32> for RingBuffer<T> {
+impl<T:Debug + Clone> Index<u32> for RingBuffer<T> {
     fn index(&self, index: u32) -> &Self::Output {
         &self.buffer[index as usize]
     }
     type Output = T;
 }
 
-impl<T: Debug> IndexMut<i32> for RingBuffer<T> {
+impl<T:Debug + Clone> IndexMut<i32> for RingBuffer<T> {
     fn index_mut(&mut self, index: i32) -> &mut Self::Output {
         &mut self.buffer[self.recalculate_index(index)]
     }
@@ -130,7 +131,7 @@ impl<T: Clone> From<&Vec<T>> for RingBuffer<T> {
     }
 }
 
-impl<'a, T: Debug> IntoIterator for &'a RingBuffer<T> {
+impl<'a, T:Debug + Clone> IntoIterator for &'a RingBuffer<T> {
     type Item = &'a T;
     type IntoIter = std::vec::IntoIter<&'a T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -139,7 +140,7 @@ impl<'a, T: Debug> IntoIterator for &'a RingBuffer<T> {
     }
 }
 
-impl<'a, T: Debug> IntoIterator for &'a mut RingBuffer<T> {
+impl<'a, T:Debug + Clone> IntoIterator for &'a mut RingBuffer<T> {
     type Item = &'a mut T;
     type IntoIter = std::vec::IntoIter<&'a mut T>;
     fn into_iter(self) -> Self::IntoIter {
@@ -290,14 +291,14 @@ impl<T: Clone + Copy + Debug> RingBuffer2D<T> {
 }
 
 /// Index gives vertical slices
-impl<T: Debug> Index<i32> for RingBuffer2D<T> {
+impl<T:Debug + Clone> Index<i32> for RingBuffer2D<T> {
     fn index(&self, index: i32) -> &Self::Output {
         &self.buffer[index]
     }
     type Output = RingBuffer<T>;
 }
 
-impl<T: Debug> Index<u32> for RingBuffer2D<T> {
+impl<T:Debug + Clone> Index<u32> for RingBuffer2D<T> {
     fn index(&self, index: u32) -> &Self::Output {
         &self.buffer[index]
     }
@@ -305,26 +306,26 @@ impl<T: Debug> Index<u32> for RingBuffer2D<T> {
 }
 
 /// Mutate vertical slices
-impl<T: Debug> IndexMut<i32> for RingBuffer2D<T> {
+impl<T:Debug + Clone> IndexMut<i32> for RingBuffer2D<T> {
     fn index_mut(&mut self, index: i32) -> &mut Self::Output {
         &mut self.buffer[index]
     }
 }
 
-impl<T: Debug> Index<(i32, i32)> for RingBuffer2D<T> {
+impl<T:Debug + Clone> Index<(i32, i32)> for RingBuffer2D<T> {
     fn index(&self, index: (i32, i32)) -> &Self::Output {
         &self.buffer[index.0][index.1]
     }
     type Output = T;
 }
 
-impl<T: Debug> IndexMut<(i32, i32)> for RingBuffer2D<T> {
+impl<T:Debug + Clone> IndexMut<(i32, i32)> for RingBuffer2D<T> {
     fn index_mut(&mut self, index: (i32, i32)) -> &mut Self::Output {
         &mut self.buffer[index.0][index.1]
     }
 }
 
-impl<'a, T: Debug> IntoIterator for &'a RingBuffer2D<T> {
+impl<'a, T:Debug + Clone> IntoIterator for &'a RingBuffer2D<T> {
     type Item = &'a RingBuffer<T>;
     type IntoIter = std::vec::IntoIter<&'a RingBuffer<T>>;
     fn into_iter(self) -> Self::IntoIter {
