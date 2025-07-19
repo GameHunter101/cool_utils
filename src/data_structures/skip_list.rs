@@ -10,22 +10,33 @@ struct Node<T: Ord + std::fmt::Debug> {
     node_type: NodeType<T>,
     next: Link<T>,
     upper_next: Link<T>,
+    prev: Link<T>,
+    upper_prev: Link<T>,
 }
 
 impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
     fn new_empty_chain() -> NonNull<Node<T>> {
         unsafe {
-            let end_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
+            let mut end_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
                 node_type: NodeType::End,
                 next: None,
                 upper_next: None,
+                prev: None,
+                upper_prev: None,
             })));
 
-            NonNull::new_unchecked(Box::into_raw(Box::new(Node {
+            let start_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
                 node_type: NodeType::Start,
                 next: Some(end_node),
                 upper_next: Some(end_node),
-            })))
+                prev: None,
+                upper_prev: None,
+            })));
+
+            (*end_node.as_ptr()).prev = Some(start_node);
+            (*end_node.as_ptr()).upper_prev = Some(start_node);
+
+            start_node
         }
     }
 
@@ -57,25 +68,11 @@ impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
         }
     }
 
-    /* fn traverse_lower(&mut self, element: T) -> &mut Node<T> {
-        unsafe {
-            if let Some(lower_next) = self.next {
-                if (*lower_next.as_ptr()).node_type > NodeType::Value(element.clone()) {
-                    self
-                } else {
-                    (*lower_next.as_ptr()).traverse_lower(element)
-                }
-            } else {
-                self
-            }
-        }
-    } */
-
     fn append(
         node: NonNull<Node<T>>,
         element: T,
         previous_upper: NonNull<Node<T>>,
-        rng: &mut ThreadRng,
+        rng: &mut StdRng,
     ) {
         unsafe {
             let promotion: bool = rng.random();
@@ -87,11 +84,19 @@ impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
                 } else {
                     None
                 },
+                prev: Some(node),
+                upper_prev: if promotion {
+                    Some(previous_upper)
+                } else {
+                    None
+                }
             })));
 
             (*node.as_ptr()).next = Some(new_node);
+            (*(*new_node.as_ptr()).next.unwrap().as_ptr()).prev = Some(new_node);
             if promotion {
                 (*previous_upper.as_ptr()).upper_next = Some(new_node);
+                (*(*new_node.as_ptr()).upper_next.unwrap().as_ptr()).upper_prev = Some(new_node);
             }
         }
     }
@@ -123,16 +128,16 @@ impl<T: Ord + std::fmt::Debug> Ord for NodeType<T> {
 struct SkipList<T: Ord + std::fmt::Debug> {
     floor_level: NonNull<Node<T>>,
     upper_level: NonNull<Node<T>>,
-    rng: ThreadRng,
+    rng: StdRng,
 }
 
 impl<T: Ord + Clone + std::fmt::Debug> SkipList<T> {
-    fn new() -> Self {
+    fn new(rng_seed: u64,) -> Self {
         let floor_level = Node::new_empty_chain();
         Self {
             floor_level,
             upper_level: floor_level,
-            rng: rand::rng(),
+            rng: StdRng::seed_from_u64(rng_seed)
         }
     }
 
@@ -142,6 +147,29 @@ impl<T: Ord + Clone + std::fmt::Debug> SkipList<T> {
             let lower_node = Node::traverse_lower(upper_node, element.clone());
 
             Node::append(lower_node, element, upper_node, &mut self.rng);
+        }
+    }
+
+    fn remove(&mut self, element: T) -> bool {
+        unsafe {
+            let upper_node = Node::traverse_upper(self.upper_level, element.clone());
+            if (*upper_node.as_ptr()).node_type == NodeType::Value(element.clone()) {
+                let boxed_node = Box::from_raw(upper_node.as_ptr());
+                (*boxed_node.prev.unwrap().as_ptr()).next = boxed_node.next;
+                (*boxed_node.upper_prev.unwrap().as_ptr()).upper_next = boxed_node.upper_next;
+                (*boxed_node.next.unwrap().as_ptr()).prev = boxed_node.prev;
+                (*boxed_node.upper_next.unwrap().as_ptr()).upper_prev = boxed_node.upper_prev;
+                return true;
+            }
+            let lower_node = Node::traverse_lower(upper_node, element.clone());
+            if (*lower_node.as_ptr()).node_type == NodeType::Value(element.clone()) {
+                let boxed_node = Box::from_raw(lower_node.as_ptr());
+                (*boxed_node.prev.unwrap().as_ptr()).next = boxed_node.next;
+                (*boxed_node.next.unwrap().as_ptr()).prev = boxed_node.prev;
+                true
+            } else {
+                false
+            }
         }
     }
 
@@ -213,14 +241,20 @@ mod test {
     use super::SkipList;
     #[test]
     fn basic() {
-        let mut list: SkipList<i32> = SkipList::new();
+        let mut list: SkipList<i32> = SkipList::new(123);
         list.insert(4);
-        println!("Upper: {:?}", list.upper_iter().collect::<Vec<_>>());
+        println!("\nUpper: {:?}", list.upper_iter().collect::<Vec<_>>());
         println!("Lower: {:?}", list.lower_iter().collect::<Vec<_>>());
         list.insert(7);
         list.insert(1);
         list.insert(12);
         list.insert(30);
+        println!("Upper: {:?}", list.upper_iter().collect::<Vec<_>>());
+        println!("Lower: {:?}", list.lower_iter().collect::<Vec<_>>());
+        list.remove(12);
+        println!("Upper: {:?}", list.upper_iter().collect::<Vec<_>>());
+        println!("Lower: {:?}", list.lower_iter().collect::<Vec<_>>());
+        list.remove(4);
         println!("Upper: {:?}", list.upper_iter().collect::<Vec<_>>());
         println!("Lower: {:?}", list.lower_iter().collect::<Vec<_>>());
     }
