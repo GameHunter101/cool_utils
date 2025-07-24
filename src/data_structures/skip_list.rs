@@ -15,7 +15,7 @@ struct Node<T: Ord + std::fmt::Debug + Clone> {
 impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
     fn new_empty_chain() -> NonNull<Node<T>> {
         unsafe {
-            let mut end_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
+            let end_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
                 node_type: NodeType::End,
                 next_ptrs: Vec::new(),
                 prev_ptrs: Vec::new(),
@@ -62,46 +62,40 @@ impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
         rng: &mut StdRng,
     ) {
         unsafe {
-            let mut next_ptrs = Vec::new();
-            let mut prev_ptrs = Vec::new();
+            let max_possible_height = traversal_path.len() + 1;
+            let height = rng.random_range(1..=max_possible_height);
 
-            next_ptrs.push(node.as_ref().next_ptrs[0]);
-            prev_ptrs.push(node);
+            let all_previous_nodes: Vec<Link<T>> = std::iter::once(node)
+                .chain(traversal_path.iter().copied())
+                .collect();
 
-            for (level, node) in traversal_path.iter().copied().enumerate() {
-                let promotion: bool = rng.random();
-                if promotion {
-                    next_ptrs.push(node.as_ref().next_ptrs[level + 1]);
-                    prev_ptrs.push(node);
-                } else {
-                    break;
-                }
-            }
 
-            let mut new_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
+            let (prev_ptrs, next_ptrs): (Vec<Link<T>>, Vec<Link<T>>) = (0..height)
+                .map(|level| {
+                    (
+                        all_previous_nodes[level],
+                        all_previous_nodes[level].as_ref().next_ptrs[level],
+                    )
+                })
+                .unzip();
+
+            let new_node = NonNull::new_unchecked(Box::into_raw(Box::new(Node {
                 node_type: NodeType::Value(element),
                 next_ptrs: next_ptrs.clone(),
                 prev_ptrs: prev_ptrs.clone(),
             })));
 
-            for (level, node) in prev_ptrs.into_iter().enumerate() {
-                (&mut (*node.as_ptr()).next_ptrs)[level] = new_node;
+            for level in 0..prev_ptrs.len() {
+                (&mut (*prev_ptrs[level].as_ptr()).next_ptrs)[level] = new_node;
+                (&mut (*next_ptrs[level].as_ptr()).prev_ptrs)[level] = new_node;
             }
 
-            let promotion_count = next_ptrs.len();
+            if height == max_possible_height && rng.random() {
+                (&mut (*origin.as_ptr()).next_ptrs).push(new_node);
+                (&mut (*end.as_ptr()).prev_ptrs).push(new_node);
 
-            for (level, node) in next_ptrs.into_iter().enumerate() {
-                (&mut (*node.as_ptr()).prev_ptrs)[level] = new_node;
-            }
-
-            if (traversal_path.len() == 0 || promotion_count == traversal_path.len())
-                && rng.random()
-            {
-                (*origin.as_ptr()).next_ptrs.push(new_node);
-                (*end.as_ptr()).prev_ptrs.push(new_node);
-
-                (*new_node.as_ptr()).next_ptrs.push(end);
-                (*new_node.as_ptr()).prev_ptrs.push(origin);
+                (&mut (*new_node.as_ptr()).next_ptrs).push(end);
+                (&mut (*new_node.as_ptr()).prev_ptrs).push(origin);
             }
         }
     }
@@ -293,7 +287,7 @@ mod test {
     #[test]
     fn traverse_finds_proper_path_with_non_empty_list() {
         unsafe {
-            let mut list = SkipList::new(13);
+            let mut list = SkipList::new(14);
             list.insert(3);
             assert_eq!(list.iter(1).count(), 3);
             let (target, path) = list.traverse(4);
