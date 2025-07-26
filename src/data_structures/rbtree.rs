@@ -2,11 +2,11 @@ use std::ptr::NonNull;
 
 type Link<T> = Option<NonNull<Node<T>>>;
 
-struct RBTree<T: Ord + std::fmt::Debug> {
+struct RBTree<T: Ord + std::fmt::Debug + Clone> {
     root: Link<T>,
 }
 
-impl<T: Ord + std::fmt::Debug> RBTree<T> {
+impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
     fn new() -> Self {
         Self { root: None }
     }
@@ -22,9 +22,17 @@ impl<T: Ord + std::fmt::Debug> RBTree<T> {
             }
         }
     }
+
+    fn in_order_vec(&self) -> Vec<T> {
+        if let Some(root) = self.root {
+            unsafe { root.as_ref().in_order_vec() }
+        } else {
+            Vec::new()
+        }
+    }
 }
 
-impl<T: Ord + std::fmt::Debug> Drop for RBTree<T> {
+impl<T: Ord + std::fmt::Debug + Clone> Drop for RBTree<T> {
     fn drop(&mut self) {
         if let Some(root) = self.root {
             Node::node_drop(root);
@@ -46,7 +54,7 @@ struct Node<T: Ord + std::fmt::Debug> {
     parent: Link<T>,
 }
 
-impl<T: Ord + std::fmt::Debug> Node<T> {
+impl<T: Ord + std::fmt::Debug + Clone> Node<T> {
     fn new(element: T, parent: Link<T>) -> NonNull<Node<T>> {
         unsafe {
             NonNull::new_unchecked(Box::into_raw(Box::new(Node {
@@ -119,9 +127,9 @@ impl<T: Ord + std::fmt::Debug> Node<T> {
                                 // Case 5
                                 println!("C5");
                                 if node_is_left_of_parent {
-                                    Self::rotate_right(node, parent_is_left_of_grandparent);
+                                    Self::rotate_right(node);
                                 } else {
-                                    Self::rotate_left(node, parent_is_left_of_grandparent);
+                                    Self::rotate_left(node);
                                 }
                             } else {
                                 node = (*node.as_ptr()).parent.unwrap();
@@ -129,9 +137,9 @@ impl<T: Ord + std::fmt::Debug> Node<T> {
                             // case 6
                             println!("C6");
                             if parent_is_left_of_grandparent {
-                                Self::rotate_right(node, parent_is_left_of_grandparent);
+                                Self::rotate_right(node);
                             } else {
-                                Self::rotate_left(node, parent_is_left_of_grandparent);
+                                Self::rotate_left(node);
                             }
                             (*node.as_ptr()).color = Color::Black;
                             if parent_is_left_of_grandparent {
@@ -160,16 +168,20 @@ impl<T: Ord + std::fmt::Debug> Node<T> {
         }
     }
 
-    fn rotate_left(node: NonNull<Node<T>>, on_left_side_of_grandparent: bool) {
+    fn rotate_left(node: NonNull<Node<T>>) {
         unsafe {
             let new_top = node;
             let new_left = (*node.as_ptr()).parent.unwrap();
             (*new_left.as_ptr()).right = (*new_top.as_ptr()).left;
+            if let Some(right_child_of_new_left) = (*new_left.as_ptr()).right {
+                (*right_child_of_new_left.as_ptr()).parent = Some(new_left);
+            }
             (*new_top.as_ptr()).left = Some(new_left);
             (*new_top.as_ptr()).parent = (*new_left.as_ptr()).parent;
             (*new_left.as_ptr()).parent = Some(new_top);
             if let Some(new_parent) = (*new_top.as_ptr()).parent {
-                if on_left_side_of_grandparent {
+                let on_left_side_of_new_parent = (*new_parent.as_ptr()).left == Some(new_left);
+                if on_left_side_of_new_parent {
                     (*new_parent.as_ptr()).left = Some(new_top);
                 } else {
                     (*new_parent.as_ptr()).right = Some(new_top);
@@ -178,16 +190,20 @@ impl<T: Ord + std::fmt::Debug> Node<T> {
         }
     }
 
-    fn rotate_right(node: NonNull<Node<T>>, on_left_side_of_grandparent: bool) {
+    fn rotate_right(node: NonNull<Node<T>>) {
         unsafe {
             let new_top = node;
             let new_right = (*node.as_ptr()).parent.unwrap();
             (*new_right.as_ptr()).left = (*new_top.as_ptr()).right;
+            if let Some(left_child_of_new_right) = (*new_right.as_ptr()).left {
+                (*left_child_of_new_right.as_ptr()).parent = Some(new_right);
+            }
             (*new_top.as_ptr()).right = Some(new_right);
             (*new_top.as_ptr()).parent = (*new_right.as_ptr()).parent;
             (*new_right.as_ptr()).parent = Some(new_top);
             if let Some(new_parent) = (*new_top.as_ptr()).parent {
-                if on_left_side_of_grandparent {
+                let on_left_side_of_new_parent = (*new_parent.as_ptr()).left == Some(new_right);
+                if on_left_side_of_new_parent {
                     (*new_parent.as_ptr()).left = Some(new_top);
                 } else {
                     (*new_parent.as_ptr()).right = Some(new_top);
@@ -214,20 +230,49 @@ impl<T: Ord + std::fmt::Debug> Node<T> {
         unsafe {
             println!("{indent}+- {:?} # {:?} - {append}", self.value, self.color);
             if let Some(left) = self.left {
-                let new_indent = format!("{indent}{}", if is_final {"   "} else {"|  "});
+                let new_indent = format!("{indent}{}", if is_final { "   " } else { "|  " });
                 left.as_ref().print(&new_indent, self.right.is_none(), "L");
             }
 
             if let Some(right) = self.right {
-                let new_indent = format!("{indent}{}", if is_final {"   "} else {"|  "});
+                let new_indent = format!("{indent}{}", if is_final { "   " } else { "|  " });
                 right.as_ref().print(&new_indent, true, "R");
             }
+        }
+    }
+
+    fn in_order_vec(&self) -> Vec<T> {
+        unsafe {
+            if self.left.is_none() && self.right.is_none() {
+                return vec![self.value.clone()];
+            }
+
+            let left_vec = if let Some(left) = self.left {
+                left.as_ref().in_order_vec()
+            } else {
+                Vec::new()
+            };
+            let right_vec = if let Some(right) = self.right {
+                right.as_ref().in_order_vec()
+            } else {
+                Vec::new()
+            };
+
+            left_vec
+                .into_iter()
+                .chain(std::iter::once(self.value.clone()))
+                .chain(right_vec.into_iter())
+                .collect()
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+
+    use rand::distr::StandardUniform;
+
     use crate::data_structures::rbtree::Color;
 
     use super::RBTree;
@@ -302,7 +347,10 @@ mod test {
             assert_eq!((*right_child.as_ptr()).value, 2);
             assert_eq!((*right_child.as_ptr()).color, Color::Black);
             assert_eq!((*(*left_child.as_ptr()).right.unwrap().as_ptr()).value, -1);
-            assert_eq!((*(*left_child.as_ptr()).right.unwrap().as_ptr()).color, Color::Red);
+            assert_eq!(
+                (*(*left_child.as_ptr()).right.unwrap().as_ptr()).color,
+                Color::Red
+            );
         }
     }
 
@@ -358,7 +406,6 @@ mod test {
             tree.insert(-2);
 
             let root = tree.root.unwrap();
-            root.as_ref().print("", true, "");
             assert_eq!((*root.as_ptr()).value, -1);
             assert_eq!((*root.as_ptr()).color, Color::Black);
             let left_child = (*root.as_ptr()).left.unwrap();
@@ -380,7 +427,6 @@ mod test {
             tree.insert(2);
 
             let root = tree.root.unwrap();
-            root.as_ref().print("", true, "");
             assert_eq!((*root.as_ptr()).value, 1);
             assert_eq!((*root.as_ptr()).color, Color::Black);
             let left_child = (*root.as_ptr()).left.unwrap();
@@ -390,5 +436,23 @@ mod test {
             assert_eq!((*right_child.as_ptr()).value, 2);
             assert_eq!((*right_child.as_ptr()).color, Color::Red);
         }
+    }
+
+    #[test]
+    fn insertion_blackbox() {
+        use rand::prelude::*;
+
+        let mut tree = RBTree::<i32>::new();
+
+        let mut rng = rand::rng();
+
+        let items: Vec<i32> = (0..50).map(|_| rng.random_range(-100..100)).collect();
+
+        for item in items {
+            tree.insert(item);
+        }
+
+        let tree_vec = tree.in_order_vec();
+        assert!(tree_vec.is_sorted());
     }
 }
