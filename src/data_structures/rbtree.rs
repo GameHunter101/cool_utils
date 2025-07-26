@@ -23,6 +23,14 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
+    fn delete(&mut self, element: T) -> bool {
+        if let Some(root) = self.root {
+            unsafe { Node::delete(root, element, &mut self.root) }
+        } else {
+            false
+        }
+    }
+
     fn in_order_vec(&self) -> Vec<T> {
         if let Some(root) = self.root {
             unsafe { root.as_ref().in_order_vec() }
@@ -263,6 +271,94 @@ impl<T: Ord + std::fmt::Debug + Clone> Node<T> {
                 .chain(std::iter::once(self.value.clone()))
                 .chain(right_vec.into_iter())
                 .collect()
+        }
+    }
+
+    fn delete(node: NonNull<Node<T>>, element: T, root: &mut Link<T>) -> bool {
+        unsafe {
+            match element.cmp(&(*node.as_ptr()).value) {
+                std::cmp::Ordering::Less => {
+                    if let Some(left) = (*node.as_ptr()).left {
+                        Self::delete(left, element, root)
+                    } else {
+                        false
+                    }
+                }
+                std::cmp::Ordering::Equal => {
+                    let child_count = (*node.as_ptr()).left.is_some() as i32
+                        + (*node.as_ptr()).right.is_some() as i32;
+                    if child_count == 2 {
+                        // Simple case 1
+                        let least_successor = Self::least_successor(node);
+                        let boxed_least_successor = Box::from_raw(least_successor.as_ptr());
+                        let least_successor_parent = boxed_least_successor.parent.unwrap();
+
+                        (*least_successor_parent.as_ptr()).left = None;
+                        (*least_successor_parent.as_ptr()).right = boxed_least_successor.right;
+                        (*node.as_ptr()).value = boxed_least_successor.value;
+                    } else if child_count == 1 {
+                        // Simple case 2
+                        let replaced_node = if let Some(left) = (*node.as_ptr()).left {
+                            left
+                        } else {
+                            (*node.as_ptr()).right.unwrap()
+                        };
+
+                        if let Some(parent) = (*node.as_ptr()).parent {
+                            if (*parent.as_ptr()).left == Some(node) {
+                                (*parent.as_ptr()).left = Some(replaced_node);
+                            } else {
+                                (*parent.as_ptr()).right = Some(replaced_node);
+                            }
+                        } else {
+                            (*replaced_node.as_ptr()).parent = None;
+                            *root = Some(replaced_node);
+                        }
+                        let _ = Box::from_raw(node.as_ptr());
+                    } else {
+                        if (*node.as_ptr()).parent.is_none() {
+                            // Simple case 3
+                            let _ = Box::from_raw(node.as_ptr());
+                            *root = None;
+                        } else if (*node.as_ptr()).color == Color::Red {
+                            // Simple case 4
+                            let parent = (*node.as_ptr()).parent.unwrap();
+
+                            if (*parent.as_ptr()).left == Some(node) {
+                                (*parent.as_ptr()).left = None;
+                            } else {
+                                (*parent.as_ptr()).right = None;
+                            }
+
+                            let _ = Box::from_raw(node.as_ptr());
+                        } else {
+                            // Complex cases
+                        }
+                    }
+                    true
+                }
+                std::cmp::Ordering::Greater => {
+                    if let Some(right) = (*node.as_ptr()).right {
+                        Self::delete(right, element, root)
+                    } else {
+                        false
+                    }
+                }
+            }
+        }
+    }
+
+    fn least_successor(node: NonNull<Node<T>>) -> NonNull<Node<T>> {
+        unsafe { Self::follow_left((*node.as_ptr()).right.unwrap()) }
+    }
+
+    fn follow_left(node: NonNull<Node<T>>) -> NonNull<Node<T>> {
+        unsafe {
+            if let Some(left) = (*node.as_ptr()).left {
+                Node::follow_left(left)
+            } else {
+                node
+            }
         }
     }
 }
