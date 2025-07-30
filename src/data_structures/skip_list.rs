@@ -69,7 +69,6 @@ impl<T: Ord + Clone + std::fmt::Debug> Node<T> {
                 .chain(traversal_path.iter().copied())
                 .collect();
 
-
             let (prev_ptrs, next_ptrs): (Vec<Link<T>>, Vec<Link<T>>) = (0..height)
                 .map(|level| {
                     (
@@ -265,11 +264,9 @@ impl<'a, T: Ord + std::fmt::Debug + Clone> Iterator for Iter<'a, T> {
 #[cfg(test)]
 mod test {
     use super::{Link, NodeType, SkipList};
-    unsafe fn path_to_vec<T: Ord + Clone + std::fmt::Debug>(
-        path: Vec<Link<T>>,
-    ) -> Vec<NodeType<T>> {
+    fn path_to_vec<T: Ord + Clone + std::fmt::Debug>(path: Vec<Link<T>>) -> Vec<NodeType<T>> {
         path.into_iter()
-            .map(|node| (*node.as_ptr()).node_type.clone())
+            .map(|node| unsafe { (*node.as_ptr()).node_type.clone() })
             .collect()
     }
 
