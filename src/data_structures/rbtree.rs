@@ -38,7 +38,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         unsafe { self.unsafe_seach(&element).is_some() }
     }
 
-    pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
+    pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<T> {
         let new_node = Node::new(element, self.nil(), self.nil());
         let mut traverse_target = self.root;
         let mut traverse_parent = self.nil();
@@ -118,7 +118,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
             (*root.as_ptr()).color = Color::Black;
         }
 
-        new_node
+        NonNull::new_unchecked(&mut (*new_node.as_ptr()).value)
     }
 
     pub fn insert(&mut self, element: T) {
