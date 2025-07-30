@@ -1,13 +1,13 @@
 use std::{boxed, ptr::NonNull};
 
-struct RBTree<T: Ord + std::fmt::Debug + Clone> {
+pub struct RBTree<T: Ord + std::fmt::Debug + Clone> {
     root: Link<T>,
     nil: NonNull<NilNode<T>>,
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
 impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let nil = NilNode::new();
         Self {
             root: Link::Nil(nil),
@@ -15,7 +15,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
+    pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
             let new_node = Node::new(element, self.nil(), self.nil());
             let mut traverse_target = self.root;
             let mut traverse_parent = self.nil();
@@ -98,13 +98,13 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
             new_node
     }
 
-    fn insert(&mut self, element: T) {
+    pub fn insert(&mut self, element: T) {
         unsafe {
             self.unsafe_insert(element);
         }
     }
 
-    fn delete(&mut self, element: T) -> bool {
+    pub fn delete(&mut self, element: T) -> bool {
         unsafe {
             let mut traversed_node = self.root;
             while let Link::Real(node) = traversed_node
@@ -305,7 +305,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         Link::Nil(self.nil)
     }
 
-    fn in_order_vec(&self) -> Vec<T> {
+    pub fn in_order_vec(&self) -> Vec<T> {
         if let Link::Real(root) = self.root {
             unsafe { root.as_ref().in_order_vec() }
         } else {
@@ -327,7 +327,7 @@ impl<T: Ord + std::fmt::Debug + Clone> Drop for RBTree<T> {
 }
 
 #[derive(Debug, PartialEq)]
-enum Link<T: Ord + std::fmt::Debug> {
+pub enum Link<T: Ord + std::fmt::Debug> {
     Real(NonNull<Node<T>>),
     Nil(NonNull<NilNode<T>>),
 }
@@ -390,7 +390,7 @@ enum Color {
 }
 
 #[derive(Debug)]
-struct Node<T: Ord + std::fmt::Debug> {
+pub struct Node<T: Ord + std::fmt::Debug> {
     value: T,
     color: Color,
     left: Link<T>,
@@ -398,7 +398,7 @@ struct Node<T: Ord + std::fmt::Debug> {
     parent: Link<T>,
 }
 
-struct NilNode<T: Ord + std::fmt::Debug> {
+pub struct NilNode<T: Ord + std::fmt::Debug> {
     color: Color,
     parent: Option<NonNull<Node<T>>>,
 }
