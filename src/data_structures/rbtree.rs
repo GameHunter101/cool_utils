@@ -15,12 +15,12 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    pub unsafe fn unsafe_seach(&mut self, element: T) -> Option<NonNull<Node<T>>> {
+    pub unsafe fn unsafe_seach(&mut self, element: &T) -> Option<NonNull<Node<T>>> {
         let mut traverse_node = self.root;
         while let Link::Real(node) = traverse_node
-            && (*node.as_ptr()).value != element
+            && &(*node.as_ptr()).value != element
         {
-            if element > (*node.as_ptr()).value {
+            if element > &(*node.as_ptr()).value {
                 traverse_node = (*node.as_ptr()).right;
             } else {
                 traverse_node = (*node.as_ptr()).left;
@@ -34,8 +34,8 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    pub fn search(&mut self, element: T) -> bool {
-        unsafe { self.unsafe_seach(element).is_some() }
+    pub fn search(&mut self, element: &T) -> bool {
+        unsafe { self.unsafe_seach(&element).is_some() }
     }
 
     pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
