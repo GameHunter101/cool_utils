@@ -335,6 +335,12 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
             Vec::new()
         }
     }
+
+    pub fn print(&self) {
+        unsafe {
+            self.root.into_node().as_ref().print("", true, "");
+        }
+    }
 }
 
 impl<T: Ord + std::fmt::Debug + Clone> Drop for RBTree<T> {
