@@ -15,87 +15,110 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
+    pub unsafe fn unsafe_seach(&mut self, element: T) -> Option<NonNull<Node<T>>> {
+        let mut traverse_node = self.root;
+        while let Link::Real(node) = traverse_node
+            && (*node.as_ptr()).value != element
+        {
+            if element > (*node.as_ptr()).value {
+                traverse_node = (*node.as_ptr()).right;
+            } else {
+                traverse_node = (*node.as_ptr()).left;
+            }
+        }
+
+        if let Link::Real(node) = traverse_node {
+            Some(node)
+        } else {
+            None
+        }
+    }
+
+    pub fn search(&mut self, element: T) -> bool {
+        unsafe { self.unsafe_seach(element).is_some() }
+    }
+
     pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
-            let new_node = Node::new(element, self.nil(), self.nil());
-            let mut traverse_target = self.root;
-            let mut traverse_parent = self.nil();
+        let new_node = Node::new(element, self.nil(), self.nil());
+        let mut traverse_target = self.root;
+        let mut traverse_parent = self.nil();
 
-            while let Link::Real(target) = traverse_target {
-                traverse_parent = traverse_target;
-                if (*new_node.as_ptr()).value < (*target.as_ptr()).value {
-                    traverse_target = (*target.as_ptr()).left;
-                } else {
-                    traverse_target = (*target.as_ptr()).right;
-                }
+        while let Link::Real(target) = traverse_target {
+            traverse_parent = traverse_target;
+            if (*new_node.as_ptr()).value < (*target.as_ptr()).value {
+                traverse_target = (*target.as_ptr()).left;
+            } else {
+                traverse_target = (*target.as_ptr()).right;
             }
+        }
 
-            (*new_node.as_ptr()).parent = traverse_parent;
+        (*new_node.as_ptr()).parent = traverse_parent;
 
-            if let Link::Nil(_) = traverse_parent {
-                self.root = Link::Real(new_node)
-            } else if let Link::Real(parent) = traverse_parent {
-                if (*new_node.as_ptr()).value < (*parent.as_ptr()).value {
-                    (*parent.as_ptr()).left = Link::Real(new_node);
-                } else {
-                    (*parent.as_ptr()).right = Link::Real(new_node);
-                }
+        if let Link::Nil(_) = traverse_parent {
+            self.root = Link::Real(new_node)
+        } else if let Link::Real(parent) = traverse_parent {
+            if (*new_node.as_ptr()).value < (*parent.as_ptr()).value {
+                (*parent.as_ptr()).left = Link::Real(new_node);
+            } else {
+                (*parent.as_ptr()).right = Link::Real(new_node);
             }
+        }
 
-            let mut rule_violator = new_node;
+        let mut rule_violator = new_node;
 
-            while Link::Real(rule_violator) != self.root
-                && (*rule_violator.as_ptr()).parent.color() == Color::Red
-            {
-                let mut parent = (*rule_violator.as_ptr()).parent.into_node();
-                let mut grandparent = (*parent.as_ptr()).parent.into_node();
-                if Link::Real(parent) == (*grandparent.as_ptr()).left {
-                    let uncle = (*grandparent.as_ptr()).right;
-                    if uncle.color() == Color::Red {
-                        (*parent.as_ptr()).color = Color::Black;
-                        (*uncle.into_node().as_ptr()).color = Color::Black;
-                        (*grandparent.as_ptr()).color = Color::Red;
-                        rule_violator = grandparent;
-                    } else {
-                        if Link::Real(rule_violator) == (*parent.as_ptr()).right {
-                            rule_violator = parent;
-                            self.rotate_left(rule_violator);
-                        }
-
-                        parent = (*rule_violator.as_ptr()).parent.into_node();
-                        grandparent = (*parent.as_ptr()).parent.into_node();
-
-                        (*parent.as_ptr()).color = Color::Black;
-                        (*grandparent.as_ptr()).color = Color::Red;
-                        self.rotate_right(grandparent);
+        while Link::Real(rule_violator) != self.root
+            && (*rule_violator.as_ptr()).parent.color() == Color::Red
+        {
+            let mut parent = (*rule_violator.as_ptr()).parent.into_node();
+            let mut grandparent = (*parent.as_ptr()).parent.into_node();
+            if Link::Real(parent) == (*grandparent.as_ptr()).left {
+                let uncle = (*grandparent.as_ptr()).right;
+                if uncle.color() == Color::Red {
+                    (*parent.as_ptr()).color = Color::Black;
+                    (*uncle.into_node().as_ptr()).color = Color::Black;
+                    (*grandparent.as_ptr()).color = Color::Red;
+                    rule_violator = grandparent;
+                } else {
+                    if Link::Real(rule_violator) == (*parent.as_ptr()).right {
+                        rule_violator = parent;
+                        self.rotate_left(rule_violator);
                     }
+
+                    parent = (*rule_violator.as_ptr()).parent.into_node();
+                    grandparent = (*parent.as_ptr()).parent.into_node();
+
+                    (*parent.as_ptr()).color = Color::Black;
+                    (*grandparent.as_ptr()).color = Color::Red;
+                    self.rotate_right(grandparent);
+                }
+            } else {
+                let uncle = (*grandparent.as_ptr()).left;
+                if uncle.color() == Color::Red {
+                    (*parent.as_ptr()).color = Color::Black;
+                    (*uncle.into_node().as_ptr()).color = Color::Black;
+                    (*grandparent.as_ptr()).color = Color::Red;
+                    rule_violator = grandparent;
                 } else {
-                    let uncle = (*grandparent.as_ptr()).left;
-                    if uncle.color() == Color::Red {
-                        (*parent.as_ptr()).color = Color::Black;
-                        (*uncle.into_node().as_ptr()).color = Color::Black;
-                        (*grandparent.as_ptr()).color = Color::Red;
-                        rule_violator = grandparent;
-                    } else {
-                        if Link::Real(rule_violator) == (*parent.as_ptr()).left {
-                            rule_violator = parent;
-                            self.rotate_right(rule_violator);
-                        }
-
-                        parent = (*rule_violator.as_ptr()).parent.into_node();
-                        grandparent = (*parent.as_ptr()).parent.into_node();
-
-                        (*parent.as_ptr()).color = Color::Black;
-                        (*grandparent.as_ptr()).color = Color::Red;
-                        self.rotate_left(grandparent);
+                    if Link::Real(rule_violator) == (*parent.as_ptr()).left {
+                        rule_violator = parent;
+                        self.rotate_right(rule_violator);
                     }
+
+                    parent = (*rule_violator.as_ptr()).parent.into_node();
+                    grandparent = (*parent.as_ptr()).parent.into_node();
+
+                    (*parent.as_ptr()).color = Color::Black;
+                    (*grandparent.as_ptr()).color = Color::Red;
+                    self.rotate_left(grandparent);
                 }
             }
+        }
 
-            if let Link::Real(root) = self.root {
-                (*root.as_ptr()).color = Color::Black;
-            }
+        if let Link::Real(root) = self.root {
+            (*root.as_ptr()).color = Color::Black;
+        }
 
-            new_node
+        new_node
     }
 
     pub fn insert(&mut self, element: T) {
