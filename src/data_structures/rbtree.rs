@@ -414,7 +414,7 @@ enum Color {
 
 #[derive(Debug)]
 pub struct Node<T: Ord + std::fmt::Debug> {
-    value: T,
+    pub value: T,
     color: Color,
     left: Link<T>,
     right: Link<T>,
