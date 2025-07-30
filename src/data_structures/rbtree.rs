@@ -5,6 +5,7 @@ struct RBTree<T: Ord + std::fmt::Debug + Clone> {
     nil: NonNull<NilNode<T>>,
 }
 
+#[allow(unsafe_op_in_unsafe_fn)]
 impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
     fn new() -> Self {
         let nil = NilNode::new();
@@ -14,8 +15,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    fn insert(&mut self, element: T) {
-        unsafe {
+    unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
             let new_node = Node::new(element, self.nil(), self.nil());
             let mut traverse_target = self.root;
             let mut traverse_parent = self.nil();
@@ -94,6 +94,13 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
             if let Link::Real(root) = self.root {
                 (*root.as_ptr()).color = Color::Black;
             }
+
+            new_node
+    }
+
+    fn insert(&mut self, element: T) {
+        unsafe {
+            self.unsafe_insert(element);
         }
     }
 
