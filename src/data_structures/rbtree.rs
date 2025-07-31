@@ -15,7 +15,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    pub unsafe fn unsafe_seach(&mut self, element: &T) -> Option<NonNull<Node<T>>> {
+    pub unsafe fn unsafe_search(&mut self, element: &T) -> Option<NonNull<Node<T>>> {
         let mut traverse_node = self.root;
         while let Link::Real(node) = traverse_node
             && &(*node.as_ptr()).value != element
@@ -35,10 +35,10 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
     }
 
     pub fn search(&mut self, element: &T) -> bool {
-        unsafe { self.unsafe_seach(&element).is_some() }
+        unsafe { self.unsafe_search(&element).is_some() }
     }
 
-    pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<T> {
+    pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
         let new_node = Node::new(element, self.nil(), self.nil());
         let mut traverse_target = self.root;
         let mut traverse_parent = self.nil();
@@ -118,7 +118,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
             (*root.as_ptr()).color = Color::Black;
         }
 
-        NonNull::new_unchecked(&mut (*new_node.as_ptr()).value)
+        new_node
     }
 
     pub fn insert(&mut self, element: T) {
@@ -127,13 +127,13 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    pub fn delete(&mut self, element: T) -> bool {
+    pub fn delete(&mut self, element: &T) -> bool {
         unsafe {
             let mut traversed_node = self.root;
             while let Link::Real(node) = traversed_node
-                && (*node.as_ptr()).value != element
+                && &(*node.as_ptr()).value != element
             {
-                if element > (*node.as_ptr()).value {
+                if element > &(*node.as_ptr()).value {
                     traversed_node = (*node.as_ptr()).right;
                 } else {
                     traversed_node = (*node.as_ptr()).left;
@@ -955,7 +955,7 @@ mod test {
         let mut tree = RBTree::new();
 
         tree.insert(0);
-        tree.delete(0);
+        tree.delete(&0);
 
         assert!(tree.root.is_nil());
     }
@@ -971,7 +971,7 @@ mod test {
         tree.insert(6);
         tree.insert(2);
 
-        assert!(tree.delete(-10));
+        assert!(tree.delete(&-10));
         assert!(tree.in_order_vec().is_sorted());
 
         unsafe {
@@ -1008,7 +1008,7 @@ mod test {
         tree.insert(-6);
         tree.insert(-2);
 
-        assert!(tree.delete(10));
+        assert!(tree.delete(&10));
         assert!(tree.in_order_vec().is_sorted());
 
         unsafe {
@@ -1044,7 +1044,7 @@ mod test {
             tree.insert(val);
         }
 
-        assert!(tree.delete(3));
+        assert!(tree.delete(&3));
 
         unsafe {
             let root = tree.root.into_node();
@@ -1083,7 +1083,7 @@ mod test {
             tree.insert(val);
         }
 
-        assert!(tree.delete(-3));
+        assert!(tree.delete(&-3));
 
         unsafe {
             let root = tree.root.into_node();
@@ -1122,7 +1122,7 @@ mod test {
             tree.insert(val);
         }
 
-        assert!(tree.delete(3));
+        assert!(tree.delete(&3));
 
         unsafe {
             let root = tree.root.into_node();
@@ -1161,7 +1161,7 @@ mod test {
             tree.insert(val);
         }
 
-        assert!(tree.delete(-3));
+        assert!(tree.delete(&-3));
 
         unsafe {
             let root = tree.root.into_node();
@@ -1207,7 +1207,7 @@ mod test {
         let indices: Vec<usize> = (0..10).map(|_| rng.random_range(0..items.len())).collect();
 
         for index in indices {
-            tree.delete(items[index]);
+            tree.delete(&items[index]);
         }
 
         let tree_vec = tree.in_order_vec();
