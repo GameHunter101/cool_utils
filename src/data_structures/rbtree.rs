@@ -1,4 +1,4 @@
-use std::{boxed, ptr::NonNull};
+use std::ptr::NonNull;
 
 pub struct RBTree<T: Ord + std::fmt::Debug + Clone> {
     root: Link<T>,
