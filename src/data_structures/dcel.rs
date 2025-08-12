@@ -99,7 +99,9 @@ impl DCEL {
             half_edges.keys().copied().collect();
         let mut faces = Vec::new();
 
-        while let Some(half_edge_id) = untraversed_half_edges.iter().next().copied() {
+        while let Some(half_edge_id) =
+            Self::get_next_valid_loop_start(&untraversed_half_edges, half_edges)
+        {
             let bordering_half_edge_ids = Self::traverse_half_edge_loop(half_edge_id, half_edges);
             untraversed_half_edges = untraversed_half_edges
                 .difference(&HashSet::from_iter(bordering_half_edge_ids.clone()))
@@ -116,6 +118,26 @@ impl DCEL {
         faces
     }
 
+    fn get_next_valid_loop_start(
+        untraversed_half_edges: &HashSet<(usize, usize)>,
+        half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>,
+    ) -> Option<(usize, usize)> {
+        untraversed_half_edges
+            .iter()
+            .filter(|&half_edge_index| unsafe {
+                (*(*(*half_edges[half_edge_index].as_ptr())
+                    .next
+                    .unwrap()
+                    .as_ptr())
+                .twin
+                .as_ptr())
+                .origin
+                    != half_edge_index.0
+            })
+            .next()
+            .copied()
+    }
+
     fn traverse_half_edge_loop(
         start: (usize, usize),
         half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>,
@@ -127,9 +149,10 @@ impl DCEL {
 
             while let Some(next) = (*current_half_edge.as_ptr()).next {
                 let next_origin = (*next.as_ptr()).origin;
+                let next_terminus = (*(*next.as_ptr()).twin.as_ptr()).origin;
                 traversal_path.push(((*current_half_edge.as_ptr()).origin, next_origin));
                 current_half_edge = next;
-                if next_origin == start.0 {
+                if (next_origin, next_terminus) == start {
                     break;
                 }
             }
@@ -172,6 +195,14 @@ impl DCEL {
     }
 }
 
+impl Drop for DCEL {
+    fn drop(&mut self) {
+        self.half_edges.values().for_each(|ptr| unsafe {
+            Box::from_raw(ptr.as_ptr());
+        });
+    }
+}
+
 type Link = Option<NonNull<HalfEdge>>;
 
 #[derive(Debug)]
@@ -193,22 +224,28 @@ impl HalfEdge {
     }
 }
 
-impl Drop for HalfEdge {
-    fn drop(&mut self) {
-        unsafe {
-            let _ = Box::from_raw(self.twin.as_ptr());
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::collections::{HashMap, HashSet};
 
     use nalgebra::Vector2;
 
-    use super::DCEL;
+    use super::{DCEL, Face};
     type Point = Vector2<f32>;
+
+    fn same_faces(real_faces: &[Face], expected_faces: Vec<Face>) -> bool {
+        real_faces.len() == expected_faces.len()
+            && expected_faces.iter().all(|face| {
+                let expected_face_hash_set: HashSet<usize> = HashSet::from_iter(face.clone());
+                real_faces.iter().any(|real_face| {
+                    real_face.len() == face.len()
+                        && HashSet::from_iter(real_face.clone())
+                            .difference(&expected_face_hash_set)
+                            .count()
+                            == 0
+                })
+            })
+    }
 
     #[test]
     fn simple_triangle_test_detects_face() {
@@ -262,7 +299,6 @@ mod test {
         let dcel = DCEL::new(vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 20);
-        assert_eq!(dcel.faces().len(), 4);
 
         let expected_faces = vec![
             vec![0, 1, 3],
@@ -271,15 +307,75 @@ mod test {
             vec![2, 5, 6],
         ];
 
-        for face in expected_faces {
-            let expected_face_hash_set: HashSet<usize> = HashSet::from_iter(face.clone());
-            assert!(dcel.faces().iter().any(|real_face| {
-                real_face.len() == face.len()
-                    && HashSet::from_iter(real_face.clone())
-                        .difference(&expected_face_hash_set)
-                        .count()
-                        == 0
-            }));
-        }
+        assert!(same_faces(dcel.faces(), expected_faces));
+    }
+
+    #[test]
+    fn multiple_unconnected_faces() {
+        let vertices = vec![
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(2.4, 3.0),
+            Point::new(4.0, 2.0),
+            Point::new(5.0, 4.0),
+            Point::new(6.0, 2.0),
+            Point::new(8.0, 2.0),
+            Point::new(7.0, 3.0),
+            Point::new(8.0, 5.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1, 3])),
+            (1, HashSet::from_iter(vec![0, 2, 3])),
+            (2, HashSet::from_iter(vec![1, 3])),
+            (3, HashSet::from_iter(vec![2, 1, 0])),
+            (4, HashSet::from_iter(vec![5, 8])),
+            (5, HashSet::from_iter(vec![4, 6, 7])),
+            (6, HashSet::from_iter(vec![5, 7, 8])),
+            (7, HashSet::from_iter(vec![6, 5])),
+            (8, HashSet::from_iter(vec![4, 6])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 22);
+
+        let expected_faces = vec![
+            vec![0, 1, 3],
+            vec![1, 2, 3],
+            vec![5, 6, 7],
+            vec![4, 5, 6, 7, 8],
+        ];
+
+        assert!(same_faces(dcel.faces(), expected_faces));
+    }
+
+    #[test]
+    fn degenerate_edge_still_detects_face() {
+        let vertices = vec![
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(2.4, 3.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.5, 2.0),
+            Point::new(0.5, 1.8),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1, 3, 5])),
+            (1, HashSet::from_iter(vec![0, 2, 4])),
+            (2, HashSet::from_iter(vec![1, 3, 5])),
+            (3, HashSet::from_iter(vec![2, 0])),
+            (4, HashSet::from_iter(vec![1])),
+            (5, HashSet::from_iter(vec![0, 2])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 14);
+
+        let expected_faces = vec![vec![0, 3, 2, 1, 4, 1], vec![0, 5, 2, 1]];
+
+        assert!(same_faces(dcel.faces(), expected_faces));
     }
 }
