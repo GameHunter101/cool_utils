@@ -48,13 +48,18 @@ impl DCEL {
 
         let faces = Self::find_all_faces(&half_edges)
             .into_iter()
-            .filter(|face| Self::signed_face_area(face, &vertices) >= 0.0).collect();
+            .filter(|face| Self::face_orientation(face, &vertices) >= 0.0)
+            .collect();
 
         Self {
             vertices,
             half_edges,
             faces,
         }
+    }
+
+    fn cross_product_2d(u: Vector2<f32>, v: Vector2<f32>) -> f32 {
+        u.x * v.y - u.y * v.x
     }
 
     fn sorted_vertex_neighbors(
@@ -69,14 +74,21 @@ impl DCEL {
             .copied()
             .collect();
 
+        let current_direction = vertices[vertex] - vertices[origin];
         unsorted_neighbors.sort_by(|&a, &b| {
-            let a_vector = vertices[a] - vertices[vertex];
-            let a_angle = a_vector.y.atan2(a_vector.x);
+            let a_direction = vertices[a] - vertices[vertex];
 
-            let b_vector = vertices[b] - vertices[vertex];
-            let b_angle = b_vector.y.atan2(b_vector.x);
+            let b_direction = vertices[b] - vertices[vertex];
 
-            a_angle.total_cmp(&b_angle)
+            let a_angle_unsigned = a_direction.angle(&current_direction);
+            let a_angle_sign = Self::cross_product_2d(current_direction, a_direction).signum();
+            let a_angle = a_angle_unsigned * a_angle_sign;
+
+            let b_angle_unsigned = b_direction.angle(&current_direction);
+            let b_angle_sign = Self::cross_product_2d(current_direction, b_direction).signum();
+            let b_angle = b_angle_unsigned * b_angle_sign;
+
+            a_angle.total_cmp(&b_angle).reverse()
         });
 
         unsorted_neighbors
@@ -108,7 +120,6 @@ impl DCEL {
         start: (usize, usize),
         half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>,
     ) -> Vec<(usize, usize)> {
-        println!("Start: {start:?}");
         unsafe {
             let mut traversal_path = Vec::new();
 
@@ -118,7 +129,6 @@ impl DCEL {
                 let next_origin = (*next.as_ptr()).origin;
                 traversal_path.push(((*current_half_edge.as_ptr()).origin, next_origin));
                 current_half_edge = next;
-                println!("Next: {:?}", next.as_ref());
                 if next_origin == start.0 {
                     break;
                 }
@@ -128,17 +138,33 @@ impl DCEL {
         }
     }
 
-    fn signed_face_area(face: &Face, vertices: &[Vector2<f32>]) -> f32 {
-        0.5 * face[..face.len() - 1]
+    fn face_orientation(face: &Face, vertices: &[Vector2<f32>]) -> f32 {
+        assert!(face.len() > 2);
+        let most_suitable_index = face.iter().fold(face[0], |acc, index| {
+            match vertices[*index].x.total_cmp(&vertices[acc].x) {
+                std::cmp::Ordering::Less => *index,
+                std::cmp::Ordering::Equal => {
+                    if vertices[*index].y < vertices[acc].y {
+                        *index
+                    } else {
+                        acc
+                    }
+                }
+                std::cmp::Ordering::Greater => acc,
+            }
+        });
+        let index_of_most_suitable_in_face = face
             .iter()
-            .enumerate()
-            .map(|(i, vertex_index)| {
-                let current_vertex = vertices[*vertex_index];
-                let next_vertex = vertices[face[i + 1]];
-
-                current_vertex.x * next_vertex.y - next_vertex.x * current_vertex.y
-            })
-            .sum::<f32>()
+            .position(|idx| idx == &most_suitable_index)
+            .unwrap() as i32;
+        let left_neighbor_index =
+            face[((index_of_most_suitable_in_face - 1).rem_euclid(face.len() as i32)) as usize];
+        let right_neighbor_index =
+            face[((index_of_most_suitable_in_face + 1) % face.len() as i32) as usize];
+        Self::cross_product_2d(
+            vertices[most_suitable_index] - vertices[left_neighbor_index],
+            vertices[right_neighbor_index] - vertices[most_suitable_index],
+        )
     }
 
     fn faces(&self) -> &[Face] {
@@ -209,5 +235,51 @@ mod test {
                 .count(),
             0
         );
+    }
+
+    #[test]
+    fn multiple_simple_faces_detected() {
+        let vertices = vec![
+            Point::new(2.0, 2.0),
+            Point::new(3.5, 0.0),
+            Point::new(3.0, 3.5),
+            Point::new(0.0, 3.0),
+            Point::new(1.0, 4.0),
+            Point::new(2.0, 5.0),
+            Point::new(4.0, 4.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1, 2, 3])),
+            (1, HashSet::from_iter(vec![0, 3, 6])),
+            (2, HashSet::from_iter(vec![0, 5, 6])),
+            (3, HashSet::from_iter(vec![0, 1, 4])),
+            (4, HashSet::from_iter(vec![3, 5])),
+            (5, HashSet::from_iter(vec![2, 4, 6])),
+            (6, HashSet::from_iter(vec![1, 2, 5])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 20);
+        assert_eq!(dcel.faces().len(), 4);
+
+        let expected_faces = vec![
+            vec![0, 1, 3],
+            vec![0, 1, 2, 6],
+            vec![0, 2, 3, 4, 5],
+            vec![2, 5, 6],
+        ];
+
+        for face in expected_faces {
+            let expected_face_hash_set: HashSet<usize> = HashSet::from_iter(face.clone());
+            assert!(dcel.faces().iter().any(|real_face| {
+                real_face.len() == face.len()
+                    && HashSet::from_iter(real_face.clone())
+                        .difference(&expected_face_hash_set)
+                        .count()
+                        == 0
+            }));
+        }
     }
 }
