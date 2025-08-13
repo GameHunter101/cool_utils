@@ -3,18 +3,18 @@ use std::{
     ptr::NonNull,
 };
 
-use nalgebra::Vector2;
+use nalgebra::{Matrix3, RowVector3, Vector2};
 
-type Face = Vec<usize>;
+pub type Face = Vec<usize>;
 
-struct DCEL {
+pub struct DCEL {
     vertices: Vec<Vector2<f32>>,
     half_edges: HashMap<(usize, usize), NonNull<HalfEdge>>,
     faces: Vec<Face>,
 }
 
 impl DCEL {
-    fn new(vertices: Vec<Vector2<f32>>, adjacency_list: HashMap<usize, HashSet<usize>>) -> Self {
+    pub fn new(vertices: Vec<Vector2<f32>>, adjacency_list: HashMap<usize, HashSet<usize>>) -> Self {
         let half_edges: HashMap<(usize, usize), NonNull<HalfEdge>> = vertices
             .iter()
             .enumerate()
@@ -48,7 +48,11 @@ impl DCEL {
 
         let faces = Self::find_all_faces(&half_edges)
             .into_iter()
-            .filter(|face| Self::face_orientation(face, &vertices) >= 0.0)
+            .filter(|face| {
+                let orientation = Self::face_orientation(face, &vertices);
+                println!("Face: {face:?} | orientation: {orientation}");
+                orientation >= 0.0
+            })
             .collect();
 
         Self {
@@ -176,21 +180,26 @@ impl DCEL {
                 std::cmp::Ordering::Greater => acc,
             }
         });
-        let index_of_most_suitable_in_face = face
+        let mut index_of_most_suitable_in_face = face
             .iter()
             .position(|idx| idx == &most_suitable_index)
             .unwrap() as i32;
-        let left_neighbor_index =
+        let mut left_neighbor_index =
             face[((index_of_most_suitable_in_face - 1).rem_euclid(face.len() as i32)) as usize];
-        let right_neighbor_index =
+        let mut right_neighbor_index =
             face[((index_of_most_suitable_in_face + 1) % face.len() as i32) as usize];
-        Self::cross_product_2d(
-            vertices[most_suitable_index] - vertices[left_neighbor_index],
-            vertices[right_neighbor_index] - vertices[most_suitable_index],
-        )
+
+        if left_neighbor_index == right_neighbor_index {
+            -1.0
+        } else {
+            Self::cross_product_2d(
+                vertices[most_suitable_index] - vertices[left_neighbor_index],
+                vertices[right_neighbor_index] - vertices[most_suitable_index],
+            )
+        }
     }
 
-    fn faces(&self) -> &[Face] {
+    pub fn faces(&self) -> &[Face] {
         &self.faces
     }
 }
@@ -377,5 +386,86 @@ mod test {
         let expected_faces = vec![vec![0, 3, 2, 1, 4, 1], vec![0, 5, 2, 1]];
 
         assert!(same_faces(dcel.faces(), expected_faces));
+    }
+
+    #[test]
+    fn degenerate_edge_still_detects_face_2() {
+        let vertices = vec![
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(2.4, 3.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.5, 2.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1, 3])),
+            (1, HashSet::from_iter(vec![0, 2, 4])),
+            (2, HashSet::from_iter(vec![1, 3])),
+            (3, HashSet::from_iter(vec![2, 0])),
+            (4, HashSet::from_iter(vec![1])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 10);
+
+        let expected_faces = vec![vec![0, 3, 2, 1, 4, 1]];
+
+        assert!(same_faces(dcel.faces(), expected_faces));
+    }
+
+    #[test]
+    fn skip_over_unconnected_face() {
+        let vertices = vec![
+            Point::new(2.0, 0.0),
+            Point::new(2.0, 2.0),
+            Point::new(2.4, 3.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.5, 2.0),
+            Point::new(0.5, 1.8),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1, 3, 5])),
+            (1, HashSet::from_iter(vec![0, 2, 4])),
+            (2, HashSet::from_iter(vec![1, 3])),
+            (3, HashSet::from_iter(vec![2, 0])),
+            (4, HashSet::from_iter(vec![1])),
+            (5, HashSet::from_iter(vec![0])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 12);
+
+        let expected_faces = vec![vec![0, 3, 2, 1, 4, 1]];
+
+        assert!(same_faces(dcel.faces(), expected_faces));
+    }
+
+    #[test]
+    fn detects_no_connected_faces() {
+        let vertices = vec![
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(1.0, 1.0),
+            Point::new(0.0, 1.0),
+            Point::new(1.0, 3.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1])),
+            (1, HashSet::from_iter(vec![0, 2])),
+            (2, HashSet::from_iter(vec![1, 3])),
+            (3, HashSet::from_iter(vec![2])),
+            (4, HashSet::from_iter(Vec::new())),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 6);
+
+        assert!(dcel.faces().is_empty());
     }
 }
