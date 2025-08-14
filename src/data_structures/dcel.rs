@@ -3,7 +3,7 @@ use std::{
     ptr::NonNull,
 };
 
-use nalgebra::{Matrix3, RowVector3, Vector2};
+use nalgebra::{Matrix2, Matrix3, RowVector3, Vector2};
 
 pub type Face = Vec<usize>;
 
@@ -14,7 +14,10 @@ pub struct DCEL {
 }
 
 impl DCEL {
-    pub fn new(vertices: Vec<Vector2<f32>>, adjacency_list: HashMap<usize, HashSet<usize>>) -> Self {
+    pub fn new(
+        vertices: Vec<Vector2<f32>>,
+        adjacency_list: HashMap<usize, HashSet<usize>>,
+    ) -> Self {
         let half_edges: HashMap<(usize, usize), NonNull<HalfEdge>> = vertices
             .iter()
             .enumerate()
@@ -50,7 +53,7 @@ impl DCEL {
             .into_iter()
             .filter(|face| {
                 let orientation = Self::face_orientation(face, &vertices);
-                println!("Face: {face:?} | orientation: {orientation}");
+                println!("Face: {face:?} | {orientation}");
                 orientation >= 0.0
             })
             .collect();
@@ -184,12 +187,13 @@ impl DCEL {
             .iter()
             .position(|idx| idx == &most_suitable_index)
             .unwrap() as i32;
+
         let mut left_neighbor_index =
             face[((index_of_most_suitable_in_face - 1).rem_euclid(face.len() as i32)) as usize];
         let mut right_neighbor_index =
             face[((index_of_most_suitable_in_face + 1) % face.len() as i32) as usize];
 
-        if left_neighbor_index == right_neighbor_index {
+        if left_neighbor_index == right_neighbor_index || face.len() == (vertices.len() - 1) * 2  {
             -1.0
         } else {
             Self::cross_product_2d(
@@ -466,6 +470,36 @@ mod test {
 
         assert_eq!(dcel.half_edges.len(), 6);
 
+        assert!(dcel.faces().is_empty());
+    }
+
+    #[test]
+    fn does_not_detect_face_in_line() {
+        let vertices = vec![
+            Point::new(200.40271, 239.94502),
+            Point::new(200.54037, 230.66301),
+            Point::new(200.47429, 222.01729),
+            Point::new(182.41234, 206.6766),
+            Point::new(176.8716, 187.22014),
+            Point::new(184.08466, 169.4879),
+            Point::new(189.91133, 158.69125),
+            Point::new(193.0, 146.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1])),
+            (1, HashSet::from_iter(vec![0, 2])),
+            (2, HashSet::from_iter(vec![1, 3])),
+            (3, HashSet::from_iter(vec![2, 4])),
+            (4, HashSet::from_iter(vec![3, 5])),
+            (5, HashSet::from_iter(vec![4, 6])),
+            (6, HashSet::from_iter(vec![5, 7])),
+            (7, HashSet::from_iter(vec![6])),
+        ]);
+
+        let dcel = DCEL::new(vertices, adjacency_list);
+
+        assert_eq!(dcel.half_edges.len(), 14);
         assert!(dcel.faces().is_empty());
     }
 }
