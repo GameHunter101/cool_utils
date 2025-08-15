@@ -56,11 +56,7 @@ impl DCEL {
 
         let faces = Self::find_all_faces(&half_edges)
             .into_iter()
-            .filter(|face| {
-                let orientation = Self::face_orientation(face, &vertices);
-                println!("Face: {face:?} | {orientation}");
-                orientation >= 0.0
-            })
+            .filter(|face| Self::face_orientation(face, &vertices) >= 0.0)
             .collect();
 
         Self {
@@ -201,7 +197,9 @@ impl DCEL {
         let mut deduped_indices = face.clone();
         deduped_indices.dedup();
 
-        if left_neighbor_index == right_neighbor_index || face.len() == (deduped_indices.len() - 1) * 2 {
+        if left_neighbor_index == right_neighbor_index
+            || face.len() == (deduped_indices.len() - 1) * 2
+        {
             -1.0
         } else {
             Self::cross_product_2d(
