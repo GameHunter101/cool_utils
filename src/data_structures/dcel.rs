@@ -31,7 +31,12 @@ impl DCEL {
 
         for (half_edge_id, half_edge_ptr) in &half_edges {
             unsafe {
-                (*half_edge_ptr.as_ptr()).twin = half_edges[&(half_edge_id.1, half_edge_id.0)];
+                (*half_edge_ptr.as_ptr()).twin = *half_edges
+                    .get(&(half_edge_id.1, half_edge_id.0))
+                    .expect(&format!(
+                        "Failed to find half edge '{:?}' as twin for '{half_edge_id:?}",
+                        (half_edge_id.1, half_edge_id.0)
+                    ));
                 let sorted_neighbors = Self::sorted_vertex_neighbors(
                     half_edge_id.1,
                     half_edge_id.0,
@@ -193,7 +198,7 @@ impl DCEL {
         let mut right_neighbor_index =
             face[((index_of_most_suitable_in_face + 1) % face.len() as i32) as usize];
 
-        if left_neighbor_index == right_neighbor_index || face.len() == (vertices.len() - 1) * 2  {
+        if left_neighbor_index == right_neighbor_index || face.len() == (vertices.len() - 1) * 2 {
             -1.0
         } else {
             Self::cross_product_2d(
