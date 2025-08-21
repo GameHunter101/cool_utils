@@ -8,14 +8,13 @@ use nalgebra::{Matrix2, Matrix3, RowVector3, Vector2};
 pub type Face = Vec<usize>;
 
 pub struct DCEL<const MAX_VERT: usize> {
-    vertices: Vec<Vector2<f32>>,
     half_edges: HashMap<(usize, usize), NonNull<HalfEdge>>,
     faces: Vec<Face>,
 }
 
 impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
     pub fn new(
-        vertices: Vec<Vector2<f32>>,
+        vertices: &[Vector2<f32>],
         adjacency_list: HashMap<usize, HashSet<usize>>,
     ) -> Self {
         let half_edges: HashMap<(usize, usize), NonNull<HalfEdge>> = vertices
@@ -64,7 +63,6 @@ impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
             .collect();
 
         Self {
-            vertices,
             half_edges,
             faces,
         }
@@ -298,7 +296,7 @@ mod test {
             (2, HashSet::from_iter(vec![0, 1])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 6);
         assert_eq!(dcel.faces().len(), 1);
@@ -333,7 +331,7 @@ mod test {
             (6, HashSet::from_iter(vec![1, 2, 5])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 20);
 
@@ -373,7 +371,7 @@ mod test {
             (8, HashSet::from_iter(vec![4, 6])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 22);
 
@@ -407,7 +405,7 @@ mod test {
             (5, HashSet::from_iter(vec![0, 2])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 14);
 
@@ -434,7 +432,7 @@ mod test {
             (4, HashSet::from_iter(vec![1])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 10);
 
@@ -463,7 +461,7 @@ mod test {
             (5, HashSet::from_iter(vec![0])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 12);
 
@@ -490,7 +488,7 @@ mod test {
             (4, HashSet::from_iter(Vec::new())),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 6);
 
@@ -521,7 +519,7 @@ mod test {
             (7, HashSet::from_iter(vec![6])),
         ]);
 
-        let dcel = DCEL::<100>::new(vertices, adjacency_list);
+        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 14);
         dbg!(dcel.faces());
