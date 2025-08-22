@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     ptr::NonNull,
 };
 
@@ -7,53 +8,63 @@ use nalgebra::{Matrix2, Matrix3, RowVector3, Vector2};
 
 pub type Face = Vec<usize>;
 
-pub struct DCEL<const MAX_VERT: usize> {
-    half_edges: HashMap<(usize, usize), NonNull<HalfEdge>>,
+pub struct DCEL {
+    half_edges: Vec<HalfEdge>,
     faces: Vec<Face>,
 }
 
-impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
-    pub fn new(
-        vertices: &[Vector2<f32>],
-        adjacency_list: HashMap<usize, HashSet<usize>>,
-    ) -> Self {
-        let half_edges: HashMap<(usize, usize), NonNull<HalfEdge>> = vertices
+impl DCEL {
+    pub fn new(vertices: &[Vector2<f32>], adjacency_list: HashMap<usize, HashSet<usize>>) -> Self {
+        let mut remaining_half_edges_set: HashSet<HalfEdge> = vertices
             .iter()
             .enumerate()
             .flat_map(|(origin, vertex)| {
                 adjacency_list[&origin]
                     .iter()
-                    .map(|neighbor| ((origin, *neighbor), HalfEdge::new(origin)))
+                    .map(|neighbor| HalfEdge::new(origin, *neighbor))
                     .collect::<Vec<_>>()
             })
             .collect();
 
-        for (half_edge_id, half_edge_ptr) in &half_edges {
-            unsafe {
-                (*half_edge_ptr.as_ptr()).twin = *half_edges
-                    .get(&(half_edge_id.1, half_edge_id.0))
-                    .expect(&format!(
-                        "Failed to find half edge '{:?}' as twin for '{half_edge_id:?}",
-                        (half_edge_id.1, half_edge_id.0)
-                    ));
-                let sorted_neighbors = Self::sorted_vertex_neighbors(
-                    half_edge_id.1,
-                    half_edge_id.0,
-                    &vertices,
-                    &adjacency_list,
-                );
+        let mut inserted_half_edges_map: HashMap<(usize, usize), usize> =
+            HashMap::with_capacity(remaining_half_edges_set.len());
 
-                let next_ptr = if let Some(next_vertex_index) = sorted_neighbors.get(0) {
-                    half_edges[&(half_edge_id.1, *next_vertex_index)]
-                } else {
-                    (*half_edge_ptr.as_ptr()).twin
+        let mut half_edges: Vec<HalfEdge> = Vec::with_capacity(remaining_half_edges_set.len());
+
+        for half_edge in remaining_half_edges_set.drain() {
+            if !inserted_half_edges_map
+                .contains_key(&(half_edge.origin_vert, half_edge.terminus_vert))
+            {
+                let base_index = half_edges.len();
+                let twin_index = half_edges.len() + 1;
+
+                let base_half_edge = HalfEdge {
+                    twin: twin_index,
+                    ..half_edge
                 };
-
-                (*half_edge_ptr.as_ptr()).next = Some(next_ptr);
+                half_edges.push(base_half_edge);
+                inserted_half_edges_map
+                    .insert((half_edge.origin_vert, half_edge.terminus_vert), base_index);
+                let twin_half_edge = HalfEdge {
+                    origin_vert: half_edge.terminus_vert,
+                    terminus_vert: half_edge.origin_vert,
+                    twin: base_index,
+                    ..half_edge
+                };
+                half_edges.push(twin_half_edge);
+                inserted_half_edges_map
+                    .insert((half_edge.terminus_vert, half_edge.origin_vert), twin_index);
             }
         }
 
-        let faces = Self::find_all_faces(&half_edges)
+        Self::assign_next_indices(
+            vertices,
+            &mut half_edges,
+            inserted_half_edges_map,
+            &adjacency_list,
+        );
+
+        let faces = Self::find_all_faces(&mut half_edges)
             .into_iter()
             .filter(|face| {
                 !face.is_empty()
@@ -62,9 +73,31 @@ impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
             })
             .collect();
 
-        Self {
-            half_edges,
-            faces,
+        Self { half_edges, faces }
+    }
+
+    fn assign_next_indices(
+        vertices: &[Vector2<f32>],
+        half_edges: &mut [HalfEdge],
+        half_edges_map: HashMap<(usize, usize), usize>,
+        adjacency_list: &HashMap<usize, HashSet<usize>>,
+    ) {
+        for half_edge in half_edges {
+            let sorted_neighbors = Self::sorted_vertex_neighbors(
+                half_edge.terminus_vert,
+                half_edge.origin_vert,
+                vertices,
+                adjacency_list,
+            );
+
+            let index_of_next_half_edge = if let Some(next_vertex_index) = sorted_neighbors.first()
+            {
+                half_edges_map[&(half_edge.terminus_vert, *next_vertex_index)]
+            } else {
+                half_edge.twin
+            };
+
+            half_edge.next = index_of_next_half_edge;
         }
     }
 
@@ -104,86 +137,24 @@ impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
         unsorted_neighbors
     }
 
-    fn find_all_faces(half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>) -> Vec<Face> {
-        let mut untraversed_half_edges: HashSet<(usize, usize)> =
-            half_edges.keys().copied().collect();
-        let mut faces = Vec::new();
+    fn find_all_faces(half_edges: &mut [HalfEdge]) -> Vec<Face> {
+        let mut faces = vec![Vec::new()];
 
-        while let Some(half_edge_id) =
-            Self::get_next_valid_loop_start(&untraversed_half_edges, half_edges)
-        {
-            let (bordering_half_edge_ids, bordering_length) =
-                Self::traverse_half_edge_loop(half_edge_id, half_edges);
-            untraversed_half_edges = untraversed_half_edges
-                .difference(&HashSet::from_iter(bordering_half_edge_ids.clone()))
-                .copied()
-                .collect();
-            if bordering_half_edge_ids[0] != (usize::MAX, usize::MAX) {
-                faces.push(
-                    bordering_half_edge_ids
-                        .into_iter()
-                        .enumerate()
-                        .flat_map(|(i, (vertex_index, _))| {
-                            if i < bordering_length {
-                                Some(vertex_index)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<Vec<_>>(),
-                );
+        for i in 0..half_edges.len() {
+            let mut edge = &mut half_edges[i];
+            let face_id = faces.len() - 1;
+            while edge.face_id == usize::MAX {
+                edge.face_id = face_id;
+                faces[face_id].push(edge.origin_vert);
+                edge = &mut half_edges[edge.next];
+            }
+
+            if !faces[face_id].is_empty() {
+                faces.push(Vec::new());
             }
         }
 
         faces
-    }
-
-    fn get_next_valid_loop_start(
-        untraversed_half_edges: &HashSet<(usize, usize)>,
-        half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>,
-    ) -> Option<(usize, usize)> {
-        untraversed_half_edges
-            .iter()
-            .filter(|&half_edge_index| unsafe {
-                (*(*(*half_edges[half_edge_index].as_ptr())
-                    .next
-                    .unwrap()
-                    .as_ptr())
-                .twin
-                .as_ptr())
-                .origin
-                    != half_edge_index.0
-            })
-            .next()
-            .copied()
-    }
-
-    fn traverse_half_edge_loop(
-        start: (usize, usize),
-        half_edges: &HashMap<(usize, usize), NonNull<HalfEdge>>,
-    ) -> ([(usize, usize); MAX_VERT], usize) {
-        unsafe {
-            let mut traversal_path = [(usize::MAX, usize::MAX); MAX_VERT];
-            let mut index = 0;
-
-            let mut current_half_edge = half_edges[&start];
-
-            while let Some(next) = (*current_half_edge.as_ptr()).next {
-                let next_origin = (*next.as_ptr()).origin;
-                let next_terminus = (*(*next.as_ptr()).twin.as_ptr()).origin;
-                traversal_path[index] = ((*current_half_edge.as_ptr()).origin, next_origin);
-                index += 1;
-                current_half_edge = next;
-                if (next_origin, next_terminus) == start {
-                    break;
-                }
-                if index >= MAX_VERT {
-                    return ([(usize::MAX, usize::MAX); MAX_VERT], 0);
-                }
-            }
-
-            (traversal_path, index)
-        }
     }
 
     fn face_orientation(face: &Face, vertices: &[Vector2<f32>]) -> f32 {
@@ -230,31 +201,30 @@ impl<const MAX_VERT: usize> DCEL<MAX_VERT> {
     }
 }
 
-impl<const MAX_VERT: usize> Drop for DCEL<MAX_VERT> {
-    fn drop(&mut self) {
-        self.half_edges.values().for_each(|ptr| unsafe {
-            Box::from_raw(ptr.as_ptr());
-        });
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+struct HalfEdge {
+    origin_vert: usize,
+    terminus_vert: usize,
+    twin: usize,
+    next: usize,
+    face_id: usize,
+}
+
+impl Hash for HalfEdge {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.origin_vert.hash(state);
+        self.terminus_vert.hash(state);
     }
 }
 
-type Link = Option<NonNull<HalfEdge>>;
-
-#[derive(Debug)]
-struct HalfEdge {
-    origin: usize,
-    twin: NonNull<HalfEdge>,
-    next: Link,
-}
-
 impl HalfEdge {
-    fn new(origin: usize) -> NonNull<Self> {
-        unsafe {
-            NonNull::new_unchecked(Box::into_raw(Box::new(Self {
-                origin,
-                twin: NonNull::dangling(),
-                next: None,
-            })))
+    fn new(origin: usize, terminus: usize) -> Self {
+        Self {
+            origin_vert: origin,
+            terminus_vert: terminus,
+            twin: usize::MAX,
+            next: usize::MAX,
+            face_id: usize::MAX,
         }
     }
 }
@@ -296,7 +266,7 @@ mod test {
             (2, HashSet::from_iter(vec![0, 1])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 6);
         assert_eq!(dcel.faces().len(), 1);
@@ -331,7 +301,7 @@ mod test {
             (6, HashSet::from_iter(vec![1, 2, 5])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 20);
 
@@ -371,7 +341,7 @@ mod test {
             (8, HashSet::from_iter(vec![4, 6])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 22);
 
@@ -405,7 +375,7 @@ mod test {
             (5, HashSet::from_iter(vec![0, 2])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 14);
 
@@ -432,7 +402,7 @@ mod test {
             (4, HashSet::from_iter(vec![1])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 10);
 
@@ -461,7 +431,7 @@ mod test {
             (5, HashSet::from_iter(vec![0])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 12);
 
@@ -488,7 +458,7 @@ mod test {
             (4, HashSet::from_iter(Vec::new())),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 6);
 
@@ -519,7 +489,7 @@ mod test {
             (7, HashSet::from_iter(vec![6])),
         ]);
 
-        let dcel = DCEL::<100>::new(&vertices, adjacency_list);
+        let dcel = DCEL::new(&vertices, adjacency_list);
 
         assert_eq!(dcel.half_edges.len(), 14);
         dbg!(dcel.faces());
