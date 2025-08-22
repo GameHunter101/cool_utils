@@ -158,7 +158,9 @@ impl DCEL {
     }
 
     fn face_orientation(face: &Face, vertices: &[Vector2<f32>]) -> f32 {
-        assert!(face.len() > 2);
+        if face.len() < 3 {
+            return -1.0;
+        }
         let most_suitable_index = face.iter().fold(face[0], |acc, index| {
             match vertices[*index].x.total_cmp(&vertices[acc].x) {
                 std::cmp::Ordering::Less => *index,
@@ -494,5 +496,36 @@ mod test {
         assert_eq!(dcel.half_edges.len(), 14);
         dbg!(dcel.faces());
         assert!(dcel.faces().is_empty());
+    }
+
+    #[test]
+    fn weird_triangle_is_detected_and_line_segment_is_not() {
+        let vertices = vec![
+            Point::new(346.66837, 251.22778),
+            Point::new(352.5979, 229.02747),
+            Point::new(354.24518, 202.9497),
+            Point::new(355.0, 191.0),
+            Point::new(344.70496, 200.32208),
+            Point::new(366.77185, 206.3999),
+            Point::new(385.24808, 210.80338),
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (0, HashSet::from_iter(vec![1])),
+            (1, HashSet::from_iter(vec![0, 2])),
+            (2, HashSet::from_iter(vec![1, 3, 4, 5])),
+            (3, HashSet::from_iter(vec![2, 4])),
+            (4, HashSet::from_iter(vec![2, 3])),
+            (5, HashSet::from_iter(vec![2, 6])),
+            (6, HashSet::from_iter(vec![5])),
+            (7, HashSet::from_iter(vec![8])),
+            (8, HashSet::from_iter(vec![7])),
+        ]);
+
+        let dcel = DCEL::new(&vertices, adjacency_list);
+
+        assert_eq!(dcel.faces().len(), 1);
     }
 }
