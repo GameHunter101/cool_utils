@@ -15,7 +15,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         }
     }
 
-    pub unsafe fn unsafe_search(&mut self, element: &T) -> Option<NonNull<Node<T>>> {
+    pub unsafe fn unsafe_search(&self, element: &T) -> Option<NonNull<Node<T>>> {
         let mut traverse_node = self.root;
         while let Link::Real(node) = traverse_node
             && &(*node.as_ptr()).value != element
@@ -36,6 +36,48 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
 
     pub fn search(&mut self, element: &T) -> bool {
         unsafe { self.unsafe_search(&element).is_some() }
+    }
+
+    pub fn get_nearest(&self, element: &T) -> &T {
+        unsafe {
+            let mut traverse_node = self.root;
+            while let Link::Real(node) = traverse_node
+                && &(*node.as_ptr()).value != element
+            {
+                /// Return the closest element to the target, even if it is not exactly the target
+                if let Link::Real(left) = (*node.as_ptr()).left
+                    && let Link::Real(right) = (*node.as_ptr()).right
+                    && &(*left.as_ptr()).value < element
+                    && &(*right.as_ptr()).value > element
+                {
+                    break;
+                } else if (*node.as_ptr()).left.is_nil()
+                    && let Link::Real(right) = (*node.as_ptr()).right
+                    && &(*right.as_ptr()).value > element
+                {
+                    break;
+                } else if (*node.as_ptr()).right.is_nil()
+                    && let Link::Real(left) = (*node.as_ptr()).left
+                    && &(*left.as_ptr()).value < element
+                {
+                    break;
+                } else if (*node.as_ptr()).left.is_nil() && (*node.as_ptr()).right.is_nil() {
+                    break;
+                }
+
+                if element > &(*node.as_ptr()).value {
+                    traverse_node = (*node.as_ptr()).right;
+                } else {
+                    traverse_node = (*node.as_ptr()).left;
+                }
+            }
+
+            let Link::Real(node) = traverse_node else {
+                panic!("No node found")
+            };
+
+            &(*node.as_ptr()).value
+        }
     }
 
     pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
@@ -1217,5 +1259,32 @@ mod test {
         let min_height = unsafe { tree.root.into_node().as_ref().min_height() };
 
         assert!((max_height as f32 / min_height as f32) < 2.0);
+    }
+
+    #[test]
+    fn simple_fuzzy_search() {
+        let mut tree: RBTree<i32> = RBTree::new();
+        tree.insert(1);
+        tree.insert(2);
+        tree.insert(5);
+        tree.insert(0);
+
+        assert_eq!(tree.get_nearest(&-1), &0);
+    }
+
+    #[test]
+    fn complex_fuzzy_search() {
+        let mut tree: RBTree<i32> = RBTree::new();
+        tree.insert(1);
+        tree.insert(2);
+        tree.insert(5);
+        tree.insert(0);
+        tree.insert(-4);
+        tree.insert(7);
+        tree.insert(12);
+        tree.insert(-3);
+
+        tree.print();
+        assert_eq!(tree.get_nearest(&8), &7);
     }
 }
