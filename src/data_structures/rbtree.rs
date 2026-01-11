@@ -38,7 +38,7 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         unsafe { self.unsafe_search(&element).is_some() }
     }
 
-    pub fn get_nearest(&self, element: &T) -> &T {
+    pub fn get_nearest(&self, element: &T) -> Option<&T> {
         unsafe {
             let mut traverse_node = self.root;
             while let Link::Real(node) = traverse_node
@@ -72,11 +72,11 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
                 }
             }
 
-            let Link::Real(node) = traverse_node else {
-                panic!("No node found")
-            };
-
-            &(*node.as_ptr()).value
+            if let Link::Real(node) = traverse_node {
+                Some(&(*node.as_ptr()).value)
+            } else {
+                None
+            }
         }
     }
 
@@ -1269,7 +1269,7 @@ mod test {
         tree.insert(5);
         tree.insert(0);
 
-        assert_eq!(tree.get_nearest(&-1), &0);
+        assert_eq!(tree.get_nearest(&-1), Some(&0));
     }
 
     #[test]
@@ -1285,6 +1285,13 @@ mod test {
         tree.insert(-3);
 
         tree.print();
-        assert_eq!(tree.get_nearest(&8), &7);
+        assert_eq!(tree.get_nearest(&8), Some(&7));
+    }
+
+    #[test]
+    fn fuzzy_search_returns_nothing() {
+        let tree: RBTree<i32> = RBTree::new();
+
+        assert_eq!(tree.get_nearest(&10), None);
     }
 }
