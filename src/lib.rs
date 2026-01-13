@@ -5,4 +5,5 @@ pub mod data_structures {
     pub mod ring_buffer;
     pub mod skip_list;
     pub mod tree;
+    pub mod quadtree;
 }
