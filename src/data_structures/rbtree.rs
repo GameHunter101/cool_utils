@@ -38,48 +38,6 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
         unsafe { self.unsafe_search(&element).is_some() }
     }
 
-    pub fn get_nearest(&self, element: &T) -> Option<&T> {
-        unsafe {
-            let mut traverse_node = self.root;
-            while let Link::Real(node) = traverse_node
-                && &(*node.as_ptr()).value != element
-            {
-                /// Return the closest element to the target, even if it is not exactly the target
-                if let Link::Real(left) = (*node.as_ptr()).left
-                    && let Link::Real(right) = (*node.as_ptr()).right
-                    && &(*left.as_ptr()).value < element
-                    && &(*right.as_ptr()).value > element
-                {
-                    break;
-                } else if (*node.as_ptr()).left.is_nil()
-                    && let Link::Real(right) = (*node.as_ptr()).right
-                    && &(*right.as_ptr()).value > element
-                {
-                    break;
-                } else if (*node.as_ptr()).right.is_nil()
-                    && let Link::Real(left) = (*node.as_ptr()).left
-                    && &(*left.as_ptr()).value < element
-                {
-                    break;
-                } else if (*node.as_ptr()).left.is_nil() && (*node.as_ptr()).right.is_nil() {
-                    break;
-                }
-
-                if element > &(*node.as_ptr()).value {
-                    traverse_node = (*node.as_ptr()).right;
-                } else {
-                    traverse_node = (*node.as_ptr()).left;
-                }
-            }
-
-            if let Link::Real(node) = traverse_node {
-                Some(&(*node.as_ptr()).value)
-            } else {
-                None
-            }
-        }
-    }
-
     pub unsafe fn unsafe_insert(&mut self, element: T) -> NonNull<Node<T>> {
         let new_node = Node::new(element, self.nil(), self.nil());
         let mut traverse_target = self.root;
@@ -381,6 +339,74 @@ impl<T: Ord + std::fmt::Debug + Clone> RBTree<T> {
     pub fn print(&self) {
         unsafe {
             self.root.into_node().as_ref().print("", true, "");
+        }
+    }
+}
+
+impl<'a, T: Ord + std::fmt::Debug + Clone + 'a> RBTree<T>
+where
+    &'a T: std::ops::Sub<&'a T, Output = T>,
+{
+    pub fn get_nearest(&self, element: &'a T) -> Option<&T> {
+        unsafe {
+            let mut traverse_node = self.root;
+            while let Link::Real(node) = traverse_node
+                && &(*node.as_ptr()).value != element
+            {
+                let traverse_value = &(*traverse_node.into_node().as_ptr()).value;
+                // let element = element.clone();
+                /// Return the closest element to the target, even if it is not exactly the target
+                if let Link::Real(left) = (*node.as_ptr()).left
+                    && let Link::Real(right) = (*node.as_ptr()).right
+                    && &(*left.as_ptr()).value < element
+                    && &(*right.as_ptr()).value > element
+                {
+                    if traverse_value < element
+                        && (&(*right.as_ptr()).value - element) < (element - traverse_value)
+                    {
+                        traverse_node = (*node.as_ptr()).right;
+                    } else if traverse_value < element
+                        && ((element - &(*left.as_ptr()).value) < (traverse_value - element))
+                    {
+                        traverse_node = (*node.as_ptr()).left;
+                    }
+                    break;
+                } else if (*node.as_ptr()).left.is_nil()
+                    && let Link::Real(right) = (*node.as_ptr()).right
+                    && &(*right.as_ptr()).value > element
+                {
+                    if traverse_value < element
+                        && ((&(*right.as_ptr()).value - element) < (element - traverse_value))
+                    {
+                        traverse_node = (*node.as_ptr()).right;
+                    }
+                    break;
+                } else if (*node.as_ptr()).right.is_nil()
+                    && let Link::Real(left) = (*node.as_ptr()).left
+                    && &(*left.as_ptr()).value < element
+                {
+                    if traverse_value < element
+                        && ((element - &(*left.as_ptr()).value) < (traverse_value - element))
+                    {
+                        traverse_node = (*node.as_ptr()).left;
+                    }
+                    break;
+                } else if (*node.as_ptr()).left.is_nil() && (*node.as_ptr()).right.is_nil() {
+                    break;
+                }
+
+                if element > &(*node.as_ptr()).value {
+                    traverse_node = (*node.as_ptr()).right;
+                } else {
+                    traverse_node = (*node.as_ptr()).left;
+                }
+            }
+
+            if let Link::Real(node) = traverse_node {
+                Some(&(*node.as_ptr()).value)
+            } else {
+                None
+            }
         }
     }
 }
@@ -1293,5 +1319,16 @@ mod test {
         let tree: RBTree<i32> = RBTree::new();
 
         assert_eq!(tree.get_nearest(&10), None);
+    }
+
+    #[test]
+    fn fuzzy_search_adjusts_for_closer_item() {
+        let mut tree: RBTree<i32> = RBTree::new();
+
+        tree.insert(0);
+        tree.insert(5);
+        tree.insert(-1);
+
+        assert_eq!(tree.get_nearest(&4), Some(&5));
     }
 }
