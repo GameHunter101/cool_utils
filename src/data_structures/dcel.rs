@@ -43,6 +43,7 @@ impl Vector for Vector3<f32> {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub struct DCEL {
     half_edges: Vec<HalfEdge>,
     faces: Vec<Face>,
