@@ -1,12 +1,47 @@
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
+    ops,
     ptr::NonNull,
 };
 
-use nalgebra::{Matrix2, Matrix3, RowVector3, Vector2};
+use nalgebra::{Matrix2, Matrix3, RowVector3, Vector2, Vector3};
 
 pub type Face = Vec<usize>;
+
+pub trait Vector: ops::Add<Output = Self> + ops::Sub<Output = Self> + Sized + Clone + Copy {
+    fn cross_magnitude(&self, other: &Self) -> f32;
+    fn angle(&self, other: &Self) -> f32;
+    fn components(&self) -> &[f32];
+}
+
+impl Vector for Vector2<f32> {
+    fn cross_magnitude(&self, other: &Self) -> f32 {
+        self.x * other.y - self.y * other.x
+    }
+
+    fn angle(&self, other: &Self) -> f32 {
+        self.angle(other)
+    }
+
+    fn components(&self) -> &[f32] {
+        self.as_slice()
+    }
+}
+
+impl Vector for Vector3<f32> {
+    fn cross_magnitude(&self, other: &Self) -> f32 {
+        self.cross(other).norm()
+    }
+
+    fn angle(&self, other: &Self) -> f32 {
+        self.angle(other)
+    }
+
+    fn components(&self) -> &[f32] {
+        self.as_slice()
+    }
+}
 
 pub struct DCEL {
     half_edges: Vec<HalfEdge>,
@@ -14,7 +49,7 @@ pub struct DCEL {
 }
 
 impl DCEL {
-    pub fn new(vertices: &[Vector2<f32>], adjacency_list: &HashMap<usize, HashSet<usize>>) -> Self {
+    pub fn new(vertices: &[impl Vector], adjacency_list: &HashMap<usize, HashSet<usize>>) -> Self {
         let mut remaining_half_edges_set: HashSet<HalfEdge> = vertices
             .iter()
             .enumerate()
@@ -77,7 +112,7 @@ impl DCEL {
     }
 
     fn assign_next_indices(
-        vertices: &[Vector2<f32>],
+        vertices: &[impl Vector],
         half_edges: &mut [HalfEdge],
         half_edges_map: HashMap<(usize, usize), usize>,
         adjacency_list: &HashMap<usize, HashSet<usize>>,
@@ -101,14 +136,14 @@ impl DCEL {
         }
     }
 
-    fn cross_product_2d(u: Vector2<f32>, v: Vector2<f32>) -> f32 {
+    /* fn cross_product_2d<const D: usize, N: nalgebra::dimension::Dim>(u: Point<D, N>, v: Point<D, N>) -> f32 {
         u.x * v.y - u.y * v.x
-    }
+    } */
 
     fn sorted_vertex_neighbors(
         vertex: usize,
         origin: usize,
-        vertices: &[Vector2<f32>],
+        vertices: &[impl Vector],
         adjacency_list: &HashMap<usize, HashSet<usize>>,
     ) -> Vec<usize> {
         let mut unsorted_neighbors: Vec<usize> = adjacency_list[&vertex]
@@ -124,11 +159,11 @@ impl DCEL {
             let b_direction = vertices[b] - vertices[vertex];
 
             let a_angle_unsigned = a_direction.angle(&current_direction);
-            let a_angle_sign = Self::cross_product_2d(current_direction, a_direction).signum();
+            let a_angle_sign = current_direction.cross_magnitude(&a_direction).signum();
             let a_angle = a_angle_unsigned * a_angle_sign;
 
             let b_angle_unsigned = b_direction.angle(&current_direction);
-            let b_angle_sign = Self::cross_product_2d(current_direction, b_direction).signum();
+            let b_angle_sign = current_direction.cross_magnitude(&b_direction).signum();
             let b_angle = b_angle_unsigned * b_angle_sign;
 
             a_angle.total_cmp(&b_angle).reverse()
@@ -157,22 +192,25 @@ impl DCEL {
         faces
     }
 
-    fn face_orientation(face: &Face, vertices: &[Vector2<f32>]) -> f32 {
+    fn face_orientation(face: &Face, vertices: &[impl Vector]) -> f32 {
         if face.len() < 3 {
             return -1.0;
         }
         let most_suitable_index = face.iter().fold(face[0], |acc, index| {
-            match vertices[*index].x.total_cmp(&vertices[acc].x) {
-                std::cmp::Ordering::Less => *index,
-                std::cmp::Ordering::Equal => {
-                    if vertices[*index].y < vertices[acc].y {
-                        *index
-                    } else {
-                        acc
+            for component_index in 0..vertices[*index].components().len() {
+                match vertices[*index].components()[component_index]
+                    .total_cmp(&vertices[acc].components()[component_index])
+                {
+                    std::cmp::Ordering::Less => {
+                        return *index;
+                    }
+                    std::cmp::Ordering::Equal => continue,
+                    std::cmp::Ordering::Greater => {
+                        return acc;
                     }
                 }
-                std::cmp::Ordering::Greater => acc,
             }
+            return acc;
         });
         let mut index_of_most_suitable_in_face = face
             .iter()
@@ -191,10 +229,8 @@ impl DCEL {
         {
             -1.0
         } else {
-            Self::cross_product_2d(
-                vertices[most_suitable_index] - vertices[left_neighbor_index],
-                vertices[right_neighbor_index] - vertices[most_suitable_index],
-            )
+            (vertices[most_suitable_index] - vertices[left_neighbor_index])
+                .cross_magnitude(&(vertices[right_neighbor_index] - vertices[most_suitable_index]))
         }
     }
 
