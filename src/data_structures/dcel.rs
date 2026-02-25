@@ -100,6 +100,7 @@ impl DCEL {
             &adjacency_list,
         );
 
+        let mut skipped_faces = 0;
         let faces = Self::find_all_faces(&mut half_edges)
             .into_iter()
             .enumerate()
@@ -108,6 +109,11 @@ impl DCEL {
                     && face[0] != usize::MAX
                     && Self::face_orientation(&face, &vertices) >= 0.0
                 {
+                    half_edges.iter_mut().for_each(|edge| {
+                        if edge.face_id == i {
+                            edge.face_id -= skipped_faces;
+                        }
+                    });
                     Some(face)
                 } else {
                     half_edges.iter_mut().for_each(|edge| {
@@ -115,6 +121,7 @@ impl DCEL {
                             edge.face_id = usize::MAX
                         }
                     });
+                    skipped_faces += 1;
                     None
                 }
             })
