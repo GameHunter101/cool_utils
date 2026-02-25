@@ -102,10 +102,21 @@ impl DCEL {
 
         let faces = Self::find_all_faces(&mut half_edges)
             .into_iter()
-            .filter(|face| {
-                !face.is_empty()
+            .enumerate()
+            .flat_map(|(i, face)| {
+                if !face.is_empty()
                     && face[0] != usize::MAX
-                    && Self::face_orientation(face, &vertices) >= 0.0
+                    && Self::face_orientation(&face, &vertices) >= 0.0
+                {
+                    Some(face)
+                } else {
+                    half_edges.iter_mut().for_each(|edge| {
+                        if edge.face_id == i {
+                            edge.face_id = usize::MAX
+                        }
+                    });
+                    None
+                }
             })
             .collect();
 
@@ -136,10 +147,6 @@ impl DCEL {
             half_edge.next = index_of_next_half_edge;
         }
     }
-
-    /* fn cross_product_2d<const D: usize, N: nalgebra::dimension::Dim>(u: Point<D, N>, v: Point<D, N>) -> f32 {
-        u.x * v.y - u.y * v.x
-    } */
 
     fn sorted_vertex_neighbors(
         vertex: usize,
@@ -237,6 +244,19 @@ impl DCEL {
 
     pub fn faces(&self) -> &[Face] {
         &self.faces
+    }
+
+    pub fn edges_of_face(&self, face_index: usize) -> Vec<[usize; 2]> {
+        self.half_edges
+            .iter()
+            .flat_map(|half_edge| {
+                if half_edge.face_id == face_index {
+                    Some([half_edge.origin_vert, half_edge.terminus_vert])
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
