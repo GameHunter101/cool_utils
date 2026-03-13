@@ -132,4 +132,63 @@ impl<const N: usize> Quadtree<N> {
             None
         }
     }
+
+    pub fn get_all_points_within_distance(
+        &self,
+        target: Vector2<f32>,
+        distance: f32,
+    ) -> Vec<Vector2<f32>> {
+        let current_level_valid_points = self.points[..self.num_points]
+            .iter()
+            .filter(|point| point.metric_distance(&target) <= distance)
+            .copied();
+
+        let mut search_up = target.y >= self.center.y;
+        let mut search_down = target.y <= self.center.y;
+        let mut search_right = target.x >= self.center.x;
+        let mut search_left = target.x <= self.center.x;
+
+        if (target.x - self.center.x).abs() <= distance {
+            search_right = true;
+            search_left = true;
+        }
+        if (target.y - self.center.y).abs() <= distance {
+            search_up = true;
+            search_down = true;
+        }
+
+        let child_results = if search_up {
+            if search_right {
+                if let Some(tr_node) = self.tr_node.as_ref() {
+                    tr_node.get_all_points_within_distance(target, distance)
+                } else {
+                    Vec::new()
+                }
+            } else {
+                if let Some(tl_node) = self.tl_node.as_ref() {
+                    tl_node.get_all_points_within_distance(target, distance)
+                } else {
+                    Vec::new()
+                }
+            }
+        } else {
+            if search_right {
+                if let Some(br_node) = self.br_node.as_ref()
+                {
+                    br_node.get_all_points_within_distance(target, distance)
+                } else {
+                    Vec::new()
+                }
+            } else {
+                if let Some(bl_node) = self.bl_node.as_ref()
+                {
+                     bl_node.get_all_points_within_distance(target, distance)
+                } else {
+                    Vec::new()
+                }
+            }
+        };
+
+        current_level_valid_points.chain(child_results).collect()
+    }
 }

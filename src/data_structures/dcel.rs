@@ -592,4 +592,31 @@ mod test {
 
         assert_eq!(dcel.faces().len(), 1);
     }
+
+    #[test]
+    fn adjacent_faces() {
+        let verts = [
+            Point::new(0.0, 38.399994),
+            Point::new(512.0, 38.399994),
+            Point::new(512.0, 473.6),
+            Point::new(0.0, 473.6),
+            Point::new(256.0, 38.399994),
+            Point::new(256.0, 473.6),
+        ];
+
+        let adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::from_iter(vec![
+            (5, HashSet::from_iter(vec![3, 2, 4])),
+            (1, HashSet::from_iter(vec![2, 4])),
+            (4, HashSet::from_iter(vec![0, 5, 1])),
+            (0, HashSet::from_iter(vec![3, 4])),
+            (2, HashSet::from_iter(vec![1, 5])),
+            (3, HashSet::from_iter(vec![5, 0])),
+        ]);
+
+        let dcel = DCEL::new(&verts, &adjacency_list);
+
+        assert_eq!(dcel.faces().len(), 2);
+        assert_eq!(dcel.faces()[0].len(), dcel.faces[1].len());
+        println!("Face: {:?}", dcel.faces()[0].iter().map(|&i| (verts[i].x, verts[i].y)).collect::<Vec<_>>());
+    }
 }
